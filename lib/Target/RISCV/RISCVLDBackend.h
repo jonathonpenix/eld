@@ -191,6 +191,14 @@ public:
     return reloc->second;
   }
 
+  const llvm::SmallVectorImpl<const Relocation *> *
+  getBaseRelocRefs(const Relocation &R) const {
+    auto Refs = m_BaseRelocRefs.find(&R);
+    if (Refs == m_BaseRelocRefs.end())
+      return nullptr;
+    return &Refs->second;
+  }
+
   const Relocation *
   getNewBaseForTLSDESCRelaxation(const Relocation &BaseReloc) const {
     auto It = m_HiToIELoadBase.find(&BaseReloc);
@@ -235,6 +243,7 @@ private:
   bool doRelaxationAlign(Relocation *R);
 
   bool doRelaxationPC(Relocation *R, Relocation::DWord G);
+  bool doRelaxationGOT(Relocation &R);
 
   bool doRelaxationTLSDESC(Relocation &R, bool Relax);
 
@@ -285,6 +294,11 @@ private:
   /// relative relocations. This is a concept in RISC-V and applies to
   /// relocations consisting of a HI20 and LO12 pairs.
   llvm::DenseMap<const Relocation *, const Relocation *> m_BaseRelocs;
+
+  /// A map to keep track of all relocations referencing a particular
+  /// base relocation. This is effectively a reverse-mapping of `m_BaseRelocs`.
+  llvm::DenseMap<const Relocation *, llvm::SmallVector<const Relocation *, 1>>
+      m_BaseRelocRefs;
 
 private:
   /// RISCV Attribute Section

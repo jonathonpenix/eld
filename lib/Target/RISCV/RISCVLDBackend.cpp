@@ -864,6 +864,127 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
   return false;
 }
 
+bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
+  Fragment *frag = Reloc.targetRef()->frag();
+  RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
+  if (!region)
+    return false;
+
+  // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
+  // this relaxation should work in the presence of a non-zero addend so avoid
+  // doing so to be safe. R_RISCV_PCREL_LO12_I should also never have a non-zero
+  // addend.
+  if (Reloc.addend())
+    return false;
+
+  const Relocation *BaseReloc = Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20
+                                    ? &Reloc
+                                    : getBaseReloc(Reloc);
+  if (!BaseReloc)
+    return false;
+
+  Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
+  uint64_t Offset = Reloc.targetRef()->offset();
+  ResolveInfo *SymInfo = BaseReloc->symInfo();
+  StringRef SymName = SymInfo->name();
+  bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
+                         config().options().getRISCVRelaxGOT();
+  if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
+    // So long as eld uses zero as an indicator of an unknown symbol value,
+    // we can't perform this relaxation if we see a symbol with value zero.
+    // Undefined weak symbols are an exception--they are handled as an
+    // absolute symbol at address 0, but we can safely disambiguate this case.
+    // FIXME: test this, I think this logic makes sense though. Test eld is
+    // consistent in that S == 0 when weak undef
+    bool SymbolValueMayBeUnknown = S == 0 && !SymInfo->isWeakUndef();
+    bool CanRelaxToAddi =
+        GOTRelaxEnabled && !SymbolValueMayBeUnknown && llvm::isInt<12>(S);
+    if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+      if (!CanRelaxToAddi) {
+        reportMissedRelaxation("RISCV_GOT", *region, Offset, 4, SymName);
+        return false;
+      }
+
+      Reloc.setType(llvm::ELF::R_RISCV_NONE);
+      relaxDeleteBytes("RISCV_GOT", *region, Offset, 4, SymName);
+      return true;
+    }
+
+    uint64_t Instr = Reloc.target();
+    unsigned rd = (Instr >> 7) & 0x1Fu;
+    bool CanRelaxToCLi = GOTRelaxEnabled &&
+                         config().options().getRISCVRelaxToC() && rd != 0 &&
+                         !SymbolValueMayBeUnknown && llvm::isInt<6>(S);
+    if (CanRelaxToCLi) {
+      unsigned CLi = 0x4001u | rd << 7;
+      region->replaceInstruction(Offset, &Reloc,
+                                 reinterpret_cast<uint8_t *>(&CLi), 2);
+      Reloc.setTargetData(CLi);
+      Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
+      Reloc.setSymInfo(SymInfo);
+      relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
+
+      if (m_Module.getPrinter()->isVerbose())
+        config().raise(Diag::relax_to_compress)
+            << "RISCV_LI_C" << llvm::utohexstr(Instr, true, 8)
+            << llvm::utohexstr(CLi, true, 4) << SymName
+            << region->getOwningSection()->name()
+            << llvm::utohexstr(Offset, true)
+            << region->getOwningSection()
+                   ->getInputFile()
+                   ->getInput()
+                   ->decoratedPath();
+
+      return true;
+    }
+
+    if (CanRelaxToAddi) {
+      unsigned Addi = itype(ADDI, rd, X_ZERO, 0);
+      region->replaceInstruction(Offset, &Reloc,
+                                 reinterpret_cast<uint8_t *>(&Addi), 4);
+      Reloc.setTargetData(Addi);
+      Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
+      // Report the two bytes missed if we had been able to use `c.li`.
+      reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
+      return true;
+    }
+
+    return false;
+  }
+
+  if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
+    return false;
+
+  // Again avoid relaxing symbols with value zero in case they indicate a symbol
+  // with an unknown value. Make an exception for RV32 as a
+  // PCREL_HI20/PCREL_LO12_I pair can reach the entire address space.
+  bool SymbolValueMayBeUnknown = S == 0 && !config().targets().is32Bits();
+  if (!GOTRelaxEnabled || SymbolValueMayBeUnknown ||
+      !llvm::isInt<32>(S - BaseReloc->place(m_Module))) {
+    // Still report a missed relaxation as we could have avoided a GOT access
+    // even if it doesn't save any bytes.
+    reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
+    return false;
+  }
+
+  if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+    assert((Reloc.target() & 0x7Fu) == 0x17 &&
+           "Expected an auipc instruction!");
+    Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
+    return true;
+  }
+
+  assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+         "Unexpected relocation type!");
+  // Rewrite the I-type to an addi, preserving rs1 and rd only.
+  uint32_t Addi = (Reloc.target() & 0xF8F80u) | 0x13u;
+  region->replaceInstruction(Offset, &Reloc, reinterpret_cast<uint8_t *>(&Addi),
+                             4);
+  Reloc.setTargetData(Addi);
+
+  return true;
+}
+
 bool RISCVLDBackend::doRelaxationPC(Relocation *reloc, Relocator::DWord G) {
 
   // There is no GP for shared objects.
@@ -978,6 +1099,7 @@ void RISCVLDBackend::translatePseudoRelocation(Relocation *reloc) {
   Relocation *reloc_jalr = Relocation::Create(llvm::ELF::R_RISCV_PCREL_LO12_I,
                                               32, fragRef, reloc->addend());
   m_BaseRelocs[reloc_jalr] = reloc;
+  m_BaseRelocRefs[reloc].push_back(reloc_jalr);
   reloc_jalr->setSymInfo(reloc->symInfo());
   m_InternalRelocs.push_back(reloc_jalr);
 }
@@ -1045,8 +1167,39 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
             doRelaxationCall(relocation);
           break;
         }
+        case llvm::ELF::R_RISCV_GOT_HI20: {
+          if (!(nextRelax && relaxation_pass == RELAXATION_PC))
+            break;
+          auto isRelaxableLO = [&rs](const Relocation *R) {
+            return R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+                   rs->getLink()->findRelocation(R->targetRef()->offset(),
+                                                 llvm::ELF::R_RISCV_RELAX);
+          };
+          const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
+              getBaseRelocRefs(*relocation);
+          if (LORelocs && !LORelocs->empty() &&
+              llvm::all_of(*LORelocs, isRelaxableLO))
+            doRelaxationGOT(*relocation);
+          break;
+        }
+        case llvm::ELF::R_RISCV_PCREL_LO12_I: {
+          if (!(nextRelax && relaxation_pass == RELAXATION_PC))
+            break;
+
+          const Relocation *HIReloc = getBaseReloc(*relocation);
+          if (!HIReloc)
+            break;
+
+          if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20) {
+            if (rs->getLink()->findRelocation(HIReloc->targetRef()->offset(),
+                                              llvm::ELF::R_RISCV_RELAX))
+              doRelaxationGOT(*relocation);
+          } else {
+            doRelaxationPC(relocation, GP);
+          }
+          break;
+        }
         case llvm::ELF::R_RISCV_PCREL_HI20:
-        case llvm::ELF::R_RISCV_PCREL_LO12_I:
         case llvm::ELF::R_RISCV_PCREL_LO12_S: {
           if (nextRelax && relaxation_pass == RELAXATION_PC)
             doRelaxationPC(relocation, GP);
@@ -1282,6 +1435,7 @@ bool RISCVLDBackend::handleRelocation(ELFSection *pSection,
         getRelocator(), pSection, pType, *hi_reloc->symInfo()->outSymbol(),
         pOffset, pAddend);
     m_BaseRelocs[reloc] = hi_reloc;
+    m_BaseRelocRefs[hi_reloc].push_back(reloc);
     if (reloc) {
       reloc->setSymInfo(hi_reloc->symInfo());
       pSection->addRelocation(reloc);

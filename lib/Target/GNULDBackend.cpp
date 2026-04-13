@@ -3906,6 +3906,9 @@ bool GNULDBackend::isSymbolPreemptible(const ResolveInfo &pSym) const {
   // The slot is never going to get filled in and will have the value 0.
   // For static/dynamic executables, we never allow weak undefined symbols to
   // be preemptible.
+  // FIXME: I think we have (minor) problems here in that we would really like
+  // to be able to do GOT relaxations on weak undef syms even when ex: we're
+  // doing static pie.
   if (pSym.isWeakUndef()) {
     if (config().options().isPIE())
       return true;
