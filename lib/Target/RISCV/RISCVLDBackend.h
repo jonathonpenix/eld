@@ -15,6 +15,7 @@
 #include "eld/Readers/ELFSection.h"
 #include "eld/SymbolResolver/IRBuilder.h"
 #include "eld/Target/GNULDBackend.h"
+#include "llvm/ADT/SmallVector.h"
 #include <unordered_set>
 
 namespace eld {
@@ -209,6 +210,31 @@ public:
 
 private:
   Relocation *findHIRelocation(ELFSection *S, uint64_t Value);
+  // FIXME: We already map lo -> hi, we don't have a hi -> lo mapping as far
+  // as I know.
+  // Three obvious options I see:
+  // - Set up a new mapping (similar to m_BaseRelocs or what TLSDESC does)
+  //   - Seems like the best option?
+  // - Actually search through the relocations for everything referencing
+  //   the hi part
+  //   - Seems slow?
+  // - Something like what mold does where it looks for exactly one lo
+  //   in sequence with the hi.
+  //   - This one seems iffy to me in that it doesn't seem like it entirely
+  //     jives with the ABI (multiple los per hi, whether they're in sequence),
+  //     but probably works for 99% of cases that matter.
+  //     But, talked through this earlier and kinda came to the conclusion it
+  //     didn't matter. Not sure.
+  // Anyway, below isn't the right way to do this, but I think it should at least
+  // be correct enough to shop for opinions on how (and whether) to handle this
+  // sort of thing and requires no plumbing in the meantime.
+  void
+  findMatchingLORelocations(const Relocation *HIReloc,
+                    llvm::SmallVectorImpl<const Relocation *> &LORelocsOut) {
+    for (auto RelocPair : m_BaseRelocs)
+      if (RelocPair.getSecond() == HIReloc)
+        LORelocsOut.push_back(RelocPair.getFirst());
+  }
 
   // This is `handleRelocation` for internal RISC-V relocations IDs.
   bool handleVendorRelocation(ELFSection *pSection,
@@ -235,6 +261,7 @@ private:
   bool doRelaxationAlign(Relocation *R);
 
   bool doRelaxationPC(Relocation *R, Relocation::DWord G);
+  bool doRelaxationGOT(Relocation &R);
 
   bool doRelaxationTLSDESC(Relocation &R, bool Relax);
 

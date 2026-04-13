@@ -24,16 +24,20 @@
 #include "eld/Input/ELFObjectFile.h"
 #include "eld/Object/ObjectBuilder.h"
 #include "eld/Object/ObjectLinker.h"
+#include "eld/Readers/Relocation.h"
 #include "eld/Support/Memory.h"
 #include "eld/Support/MemoryArea.h"
 #include "eld/Support/MsgHandling.h"
 #include "eld/Support/TargetRegistry.h"
 #include "eld/Support/Utils.h"
 #include "eld/SymbolResolver/IRBuilder.h"
+#include "eld/SymbolResolver/ResolveInfo.h"
 #include "eld/Target/ELFFileFormat.h"
 #include "eld/Target/ELFSegmentFactory.h"
 #include "eld/Target/GNULDBackend.h"
 #include "llvm/ADT/Hashing.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Casting.h"
@@ -366,6 +370,8 @@ bool RISCVLDBackend::doRelaxationQCCall(Relocation *reloc) {
 
   Fragment *frag = reloc->targetRef()->frag();
   RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
+  // FIXME: Why is this `return true;` instead of false?
+  // I guess it doesn't really matter since we don't do anything with it...
   if (!region)
     return true;
   uint64_t offset = reloc->targetRef()->offset();
@@ -864,6 +870,75 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
   return false;
 }
 
+// FIXME: this might be better as a reference, shouldn't ever be null
+bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
+  // FIXME: add flag to disable this relaxation specifically?
+
+  Fragment *frag = Reloc.targetRef()->frag();
+  RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
+  if (!region)
+    return false;
+
+  const Relocation *BaseReloc = Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20
+                                    ? &Reloc
+                                    : getBaseReloc(Reloc);
+  if (!BaseReloc)
+    return false;
+
+  uint64_t Offset = Reloc.targetRef()->offset();
+
+  // FIXME: maybe consider the hi/lo checking here (besides the initial got
+  // check)
+
+  // FIXME: I think the separate checks are needed?
+  // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
+  // diff? Presumably Base, but not sure if there is an "auto look through"
+  if (Reloc.symInfo()->isAbsolute() || Reloc.symInfo()->isWeakUndef()) {
+    bool CanRelaxToAddi = config().options().getRISCVRelax() &&
+                          llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
+    if (!CanRelaxToAddi)
+      // FIXME: presumably should report missed relax,
+      // I guess the right thing to do here is report it in chunks rather than
+      // all at once...4 bytes
+      // when looking at GOT_HI, 0/2 bytes when looking at LO?
+      return false;
+
+    if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+      Reloc.setType(llvm::ELF::R_RISCV_NONE);
+      relaxDeleteBytes("RISCV_GOT", *region, Offset, 4,
+                       Reloc.symInfo()->name());
+      return true;
+    }
+
+    assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+           "Unexpected relocation type!");
+    uint64_t Instr = Reloc.target();
+    unsigned rd = (Instr >> 7) & 0x1fu;
+    bool CanRelaxToCLi = config().options().getRISCVRelax() &&
+                         config().options().getRISCVRelaxToC() && rd != 0 &&
+                         llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
+    if (CanRelaxToCLi) {
+      // TODO: rewrite to the c.li
+      return true;
+    }
+
+    // TODO: rewrite to the addi
+    return true;
+  }
+
+  // FIXME: "bound at link time"? Are there other conditions I care about?
+  if (isSymbolPreemptible(*BaseReloc->symInfo()) ||
+      BaseReloc->symInfo()->isIFunc())
+    return false;
+
+  // +- 2GB range
+  // FIXME: should I report missed relax here? No bytes, but avoid .got access
+
+  // TODO: rewrite to the auipic + addi
+
+  return true;
+}
+
 bool RISCVLDBackend::doRelaxationPC(Relocation *reloc, Relocator::DWord G) {
 
   // There is no GP for shared objects.
@@ -1036,6 +1111,9 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (nextRelax->type() != llvm::ELF::R_RISCV_RELAX)
             nextRelax = nullptr;
         }
+        auto getRelaxAtOffset = [&rs](uint64_t Offset) {
+          return rs->getLink()->findRelocation(Offset, llvm::ELF::R_RISCV_RELAX);
+        };
 
         // try to relax
         switch (type) {
@@ -1045,8 +1123,37 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
             doRelaxationCall(relocation);
           break;
         }
+        case llvm::ELF::R_RISCV_GOT_HI20: {
+          if (!(nextRelax && relaxation_pass == RELAXATION_PC))
+            break;
+          llvm::SmallVector<const Relocation *, 1> LORelocs;
+          findMatchingLORelocations(relocation, LORelocs);
+          if (!LORelocs.empty() && llvm::all_of(LORelocs, getRelaxAtOffset))
+            doRelaxationGOT(*relocation);
+          break;
+        }
+        case llvm::ELF::R_RISCV_PCREL_LO12_I: {
+          if (!(nextRelax && relaxation_pass == RELAXATION_PC))
+            break;
+
+          // TODO: I think this fulfills the condition "The symbol pointed to by
+          // R_RISCV_PCREL_LO12_I is at the location to which R_RISCV_GOT_HI20
+          // refers" but should double check/confirm this.
+          const Relocation *HIReloc = getBaseReloc(*relocation);
+          // FIXME: I don't think this (and the assert in doRelaxationPC) are correct?
+          // Assuming the Relocation::apply happens *after* everything is relaxed,
+          // we really want to be issuing a diagnostic, not asserting.
+          // This should be fixed independently before merging.
+          assert(HIReloc && "HIReloc not found!");
+          if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20) {
+            if (getRelaxAtOffset(HIReloc->targetRef()->offset()))
+              doRelaxationGOT(*relocation);
+          } else {
+            doRelaxationPC(relocation, GP);
+          }
+          break;
+        }
         case llvm::ELF::R_RISCV_PCREL_HI20:
-        case llvm::ELF::R_RISCV_PCREL_LO12_I:
         case llvm::ELF::R_RISCV_PCREL_LO12_S: {
           if (nextRelax && relaxation_pass == RELAXATION_PC)
             doRelaxationPC(relocation, GP);
@@ -1071,8 +1178,7 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
             // R_RISCV_TLSDESC_HI20 relocation.
             if (type != llvm::ELF::R_RISCV_TLSDESC_HI20)
               if (const Relocation *HIReloc = getBaseReloc(*relocation))
-                nextRelax = rs->getLink()->findRelocation(
-                    HIReloc->targetRef()->offset(), llvm::ELF::R_RISCV_RELAX);
+                nextRelax = getRelaxAtOffset(HIReloc->targetRef()->offset());
             // Note that doRelaxationTLSDESC is used for both optimizations and
             // relaxations, therefore this function should be called regardless
             // of whether relaxations are enabled.
