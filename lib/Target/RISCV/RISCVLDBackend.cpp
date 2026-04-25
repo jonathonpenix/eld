@@ -38,6 +38,7 @@
 #include "llvm/ADT/Hashing.h"
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
+#include "llvm/ADT/StringRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Casting.h"
@@ -887,42 +888,57 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   uint64_t Offset = Reloc.targetRef()->offset();
 
-  // FIXME: maybe consider the hi/lo checking here (besides the initial got
-  // check)
-
   // FIXME: I think the separate checks are needed?
   // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
   // diff? Presumably Base, but not sure if there is an "auto look through"
   if (Reloc.symInfo()->isAbsolute() || Reloc.symInfo()->isWeakUndef()) {
     bool CanRelaxToAddi = config().options().getRISCVRelax() &&
                           llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
-    if (!CanRelaxToAddi)
-      // FIXME: presumably should report missed relax,
-      // I guess the right thing to do here is report it in chunks rather than
-      // all at once...4 bytes
-      // when looking at GOT_HI, 0/2 bytes when looking at LO?
-      return false;
-
-    if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
-      Reloc.setType(llvm::ELF::R_RISCV_NONE);
-      relaxDeleteBytes("RISCV_GOT", *region, Offset, 4,
-                       Reloc.symInfo()->name());
-      return true;
-    }
-
-    assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
-           "Unexpected relocation type!");
     uint64_t Instr = Reloc.target();
     unsigned rd = (Instr >> 7) & 0x1fu;
     bool CanRelaxToCLi = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxToC() && rd != 0 &&
                          llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
+
+    if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+      StringRef SymName = Reloc.symInfo()->name();
+      if (!CanRelaxToAddi && !CanRelaxToCLi) {
+        reportMissedRelaxation("RISCV_GOT", *region, Offset, 4, SymName);
+        return false;
+      }
+
+      Reloc.setType(llvm::ELF::R_RISCV_NONE);
+      relaxDeleteBytes("RISCV_GOT", *region, Offset, 4, SymName);
+      return true;
+    }
+
+    assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+           "Unexpected relocation type!");
     if (CanRelaxToCLi) {
-      // TODO: rewrite to the c.li
+      // FIXME: I think this needs a new internal relocation? the "abosolute"
+      // location still might change, no? Think linker script syms.
+      // For now, just ignore that--want to see what happens
+      // TODO: rewrite the c.li
+
+      // TODO: report relax to compress
+      if (m_Module.getPrinter()->isVerbose())
+        config().raise(Diag::relax_to_compress)
+            << "RISCV_LI_C" << llvm::utohexstr(instr, true, 8)
+            << llvm::utohexstr(compressed, true, 4) << reloc->symInfo()->name()
+            << region->getOwningSection()->name()
+            << llvm::utohexstr(offset, true)
+            << region->getOwningSection()
+                   ->getInputFile()
+                   ->getInput()
+                   ->decoratedPath();
       return true;
     }
 
     // TODO: rewrite to the addi
+    // FIXME: does this need a new internal relocation? Conceptually I think
+    // we can just use LO12_I, 
+    // Report the two bytes missed if we had been able to use `c.li`
+    reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
     return true;
   }
 
@@ -934,7 +950,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   // +- 2GB range
   // FIXME: should I report missed relax here? No bytes, but avoid .got access
 
-  // TODO: rewrite to the auipic + addi
+  // TODO: rewrite to the auipc + addi
 
   return true;
 }
@@ -1135,16 +1151,11 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
         case llvm::ELF::R_RISCV_PCREL_LO12_I: {
           if (!(nextRelax && relaxation_pass == RELAXATION_PC))
             break;
-
-          // TODO: I think this fulfills the condition "The symbol pointed to by
-          // R_RISCV_PCREL_LO12_I is at the location to which R_RISCV_GOT_HI20
-          // refers" but should double check/confirm this.
+          
           const Relocation *HIReloc = getBaseReloc(*relocation);
-          // FIXME: I don't think this (and the assert in doRelaxationPC) are correct?
-          // Assuming the Relocation::apply happens *after* everything is relaxed,
-          // we really want to be issuing a diagnostic, not asserting.
-          // This should be fixed independently before merging.
-          assert(HIReloc && "HIReloc not found!");
+          if (!HIReloc)
+            break;
+
           if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20) {
             if (getRelaxAtOffset(HIReloc->targetRef()->offset()))
               doRelaxationGOT(*relocation);
