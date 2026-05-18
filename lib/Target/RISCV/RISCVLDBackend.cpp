@@ -917,7 +917,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     if (CanRelaxToCLi) {
       // FIXME: I think this needs a new internal relocation? the "abosolute"
       // location still might change, no? Think linker script syms.
-      // For now, just ignore that--want to see what happens
       // TODO: rewrite the c.li
 
       // TODO: report relax to compress
@@ -936,7 +935,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
     // TODO: rewrite to the addi
     // FIXME: does this need a new internal relocation? Conceptually I think
-    // we can just use LO12_I, 
+    // we can just use LO12_I, but in practice I think it has checks that there
+    // is an associated HI relocation which is obviously going to be a problem.
     // Report the two bytes missed if we had been able to use `c.li`
     reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
     return true;

@@ -15,6 +15,7 @@
 #include "eld/SymbolResolver/Resolver.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/BinaryFormat/ELF.h"
+#include <cstdint>
 
 namespace eld {
 
@@ -203,6 +204,8 @@ RelocationDescMap RelocDescs = {
 
     /* Internal Relocations for Relaxation */
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_RVC_LUI, applyCompressedLUI),
+    /* FIXME: is it safe to insert this here or does this need to go at the end? */
+    INTERNAL_RELOC_DESC_ENTRY(R_RISCV_RVC_LI, applyCompressedLI),
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_GPREL_I, applyGPRel),
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_GPREL_S, applyGPRel),
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_TPREL_I, unsupported),
@@ -1107,6 +1110,22 @@ RISCVRelocator::Result applyCompressedLUI(Relocation &pReloc,
   // The bottom 12 bits are signed.
   uint64_t LoImm = llvm::SignExtend64<12>(Result);
   return ApplyReloc(pReloc, (Result - LoImm) >> 12, pRelocDesc,
+                    Backend.config(), Parent);
+}
+
+RISCVRelocator::Result applyCompressedLI(Relocation &pReloc,
+                                         RISCVLDBackend &Backend,
+                                         RISCVRelocator &Parent,
+                                         RelocationDescription &pRelocDesc) {
+  const Relocation *HIReloc = Backend.getBaseReloc(pReloc);
+  if (!HIReloc)
+    return Relocator::BadReloc;
+
+  // FIXME: I don't think there should ever be an addend for what this is used
+  // for? It should just be the value? Is there something I'm missing?
+  // FIXME: Is getSymbolValuePLT going to point to the right thing? Want the
+  // abs addr
+  return ApplyReloc(pReloc, Backend.getSymbolValuePLT(*HIReloc), pRelocDesc,
                     Backend.config(), Parent);
 }
 
