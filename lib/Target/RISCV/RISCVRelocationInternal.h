@@ -49,6 +49,8 @@ enum : uint32_t {
   LastRelaxationRelocation = 319,
 
   R_RISCV_RVC_LUI = FirstRelaxationRelocation,
+  // FIXME: Naming?
+  // FIXME: Does this need to go at the bottom?
   R_RISCV_RVC_LI,
   R_RISCV_GPREL_I,
   R_RISCV_GPREL_S,
@@ -66,6 +68,7 @@ enum : uint32_t {
     all 64 vendor relocations. `<vendor symbol>RelocationOffset` will be
     added to the nonstandard ID to get the internal ID.
   */
+  // FIXME: do I need to increment these?
   FirstInternalRelocation = 320,
   LastInternalRelocation = 323,
 
