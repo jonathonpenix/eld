@@ -42,6 +42,7 @@
 #include "llvm/ADT/StringSwitch.h"
 #include "llvm/BinaryFormat/ELF.h"
 #include "llvm/Support/Casting.h"
+#include "llvm/Support/MathExtras.h"
 #include <optional>
 #include <string>
 
@@ -526,6 +527,8 @@ bool RISCVLDBackend::doRelaxationLui(Relocation *reloc, Relocator::DWord G) {
 
       // Replace encoding and relocation type, keep the register.
       unsigned compressed = 0x6001u | rd << 7;
+      // FIXME: why doesn't this have a replace insn or similar? Does it even
+      // matter?
       reloc->setTargetData(compressed);
       reloc->setType(ELF::riscv::internal::R_RISCV_RVC_LUI);
       relaxDeleteBytes("RISCV_LUI_C", *region, offset + 2, 2,
@@ -887,6 +890,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     return false;
 
   uint64_t Offset = Reloc.targetRef()->offset();
+  StringRef SymName = BaseReloc->symInfo()->name();
 
   // FIXME: I think the separate checks are needed?
   // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
@@ -895,13 +899,13 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     bool CanRelaxToAddi = config().options().getRISCVRelax() &&
                           llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
     uint64_t Instr = Reloc.target();
+    // FIXME: is this right or did I copy-paste this blindly?
     unsigned rd = (Instr >> 7) & 0x1fu;
     bool CanRelaxToCLi = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxToC() && rd != 0 &&
                          llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
 
     if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
-      StringRef SymName = Reloc.symInfo()->name();
       if (!CanRelaxToAddi && !CanRelaxToCLi) {
         reportMissedRelaxation("RISCV_GOT", *region, Offset, 4, SymName);
         return false;
@@ -915,17 +919,18 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
            "Unexpected relocation type!");
     if (CanRelaxToCLi) {
-      // FIXME: I think this needs a new internal relocation? the "abosolute"
-      // location still might change, no? Think linker script syms.
-      // TODO: rewrite the c.li
+      unsigned CLi = 0x4001u | rd << 7;
+      region->replaceInstruction(Offset, &Reloc, reinterpret_cast<uint8_t *>(&CLi), 2);
+      Reloc.setTargetData(CLi);
+      Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
+      relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
 
-      // TODO: report relax to compress
       if (m_Module.getPrinter()->isVerbose())
         config().raise(Diag::relax_to_compress)
-            << "RISCV_LI_C" << llvm::utohexstr(instr, true, 8)
-            << llvm::utohexstr(compressed, true, 4) << reloc->symInfo()->name()
+            << "RISCV_LI_C" << llvm::utohexstr(Instr, true, 8)
+            << llvm::utohexstr(CLi, true, 4) << SymName
             << region->getOwningSection()->name()
-            << llvm::utohexstr(offset, true)
+            << llvm::utohexstr(Offset, true)
             << region->getOwningSection()
                    ->getInputFile()
                    ->getInput()
@@ -933,11 +938,17 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       return true;
     }
 
-    // TODO: rewrite to the addi
-    // FIXME: does this need a new internal relocation? Conceptually I think
-    // we can just use LO12_I, but in practice I think it has checks that there
-    // is an associated HI relocation which is obviously going to be a problem.
-    // Report the two bytes missed if we had been able to use `c.li`
+    unsigned Addi = itype(ADDI, rd, X_ZERO, 0);
+    region->replaceInstruction(Offset, &Reloc,
+                               reinterpret_cast<uint8_t *>(&Addi), 4);
+    Reloc.setTargetData(Addi);
+    // FIXME: I think this is right? We don't care about this being pcrel given
+    // the symbol is absolute
+    // FIXME: Is this going to cause any issues having an abs reloc in what
+    // should generally be a pcrel link?
+    Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
+    assert(Reloc.addend() == 0 && "Unexpected non-zero addend!");
+    // Report the two bytes missed if we had been able to use `c.li`.
     reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
     return true;
   }
@@ -947,10 +958,22 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       BaseReloc->symInfo()->isIFunc())
     return false;
 
-  // +- 2GB range
-  // FIXME: should I report missed relax here? No bytes, but avoid .got access
+  Relocator::DWord TargetSymLocation = getSymbolValuePLT(*BaseReloc);
+  Relocator::DWord GOTHILocation = BaseReloc->place(m_Module);
+  if (!llvm::isInt<32>(TargetSymLocation - GOTHILocation)) {
+    // Still report a missed relaxation as we could have avoided a GOT access
+    // even if it doesn't save any bytes.
+    reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
+    return false;
+  }
 
-  // TODO: rewrite to the auipc + addi
+  if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+      // FIXME: assert that we're looking at an AUIPC
+      Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
+      return true;
+  }
+
+  // TODO: rewrite the lw to addi
 
   return true;
 }
