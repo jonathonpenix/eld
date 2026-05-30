@@ -874,7 +874,6 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
   return false;
 }
 
-// FIXME: this might be better as a reference, shouldn't ever be null
 bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   // FIXME: add flag to disable this relaxation specifically?
 
@@ -900,7 +899,9 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
                           llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
     uint64_t Instr = Reloc.target();
     // FIXME: is this right or did I copy-paste this blindly?
-    unsigned rd = (Instr >> 7) & 0x1fu;
+    // FIXME: this isn't always right, don't know yet which instruction we're
+    // looking at
+    unsigned rd = (Instr >> 7) & 0x1Fu;
     bool CanRelaxToCLi = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxToC() && rd != 0 &&
                          llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
@@ -920,7 +921,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
            "Unexpected relocation type!");
     if (CanRelaxToCLi) {
       unsigned CLi = 0x4001u | rd << 7;
-      region->replaceInstruction(Offset, &Reloc, reinterpret_cast<uint8_t *>(&CLi), 2);
+      region->replaceInstruction(Offset, &Reloc,
+                                 reinterpret_cast<uint8_t *>(&CLi), 2);
       Reloc.setTargetData(CLi);
       Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
       relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
@@ -953,6 +955,9 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     return true;
   }
 
+  // FIXME: the checks that relax, etc. are enabled don't reach this code, need
+  // to add checks here or hoist the ones above
+
   // FIXME: "bound at link time"? Are there other conditions I care about?
   if (isSymbolPreemptible(*BaseReloc->symInfo()) ||
       BaseReloc->symInfo()->isIFunc())
@@ -968,12 +973,19 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   }
 
   if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
-      // FIXME: assert that we're looking at an AUIPC
-      Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
-      return true;
+    assert((Reloc.target() & 0x7Fu) == 0x17 &&
+           "Expected an auipc instruction!");
+    Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
+    return true;
   }
 
-  // TODO: rewrite the lw to addi
+  assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+         "Unexpected relocation type!");
+  // Rewrite the I-type to an addi, preserving rs1 and rd only.
+  uint32_t Addi = (Reloc.target() & 0xF8F80u) | 0x13u;
+  region->replaceInstruction(Offset, &Reloc, reinterpret_cast<uint8_t *>(&Addi),
+                             4);
+  Reloc.setTargetData(Addi);
 
   return true;
 }
