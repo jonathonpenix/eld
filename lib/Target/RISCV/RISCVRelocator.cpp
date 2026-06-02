@@ -55,6 +55,7 @@ DECL_RISCV_APPLY_RELOC_FUNC(applyJumpOrCall)
 DECL_RISCV_APPLY_RELOC_FUNC(applyAlign)
 DECL_RISCV_APPLY_RELOC_FUNC(applyGPRel)
 DECL_RISCV_APPLY_RELOC_FUNC(applyCompressedLUI)
+DECL_RISCV_APPLY_RELOC_FUNC(applyCompressedLI)
 DECL_RISCV_APPLY_RELOC_FUNC(applyTprelAdd)
 DECL_RISCV_APPLY_RELOC_FUNC(applyGOT)
 DECL_RISCV_APPLY_RELOC_FUNC(applyVendor)
@@ -204,7 +205,6 @@ RelocationDescMap RelocDescs = {
 
     /* Internal Relocations for Relaxation */
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_RVC_LUI, applyCompressedLUI),
-    /* FIXME: is it safe to insert this here or does this need to go at the end? */
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_RVC_LI, applyCompressedLI),
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_GPREL_I, applyGPRel),
     INTERNAL_RELOC_DESC_ENTRY(R_RISCV_GPREL_S, applyGPRel),
@@ -1123,8 +1123,10 @@ RISCVRelocator::Result applyCompressedLI(Relocation &pReloc,
 
   // FIXME: I don't think there should ever be an addend for what this is used
   // for? It should just be the value? Is there something I'm missing?
-  // FIXME: Is getSymbolValuePLT going to point to the right thing? Want the
-  // abs addr
+  // The other awkward thing is, which addend would even be appropriate?
+  // - pcrel lo should always be addend = 0
+  // - I guess the got formula is technically G + GOT + A - P so maybe there
+  //   can be a non-zero addend?
   return ApplyReloc(pReloc, Backend.getSymbolValuePLT(*HIReloc), pRelocDesc,
                     Backend.config(), Parent);
 }

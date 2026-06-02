@@ -657,7 +657,6 @@ RISCVRelocationMap RISCVRelocs = {
       /*.VerifyAlignment = */ false,
       /*.Signed = */ true,
       /*.Size = */ 16}},
-      /* FIXME: is it safe to insert this here? Or does this need to go at the end? */
       {eld::ELF::riscv::internal::R_RISCV_RVC_LI,
      {/*.Name = */ "R_RISCV_RVC_LI",
       /*.Type = */ eld::ELF::riscv::internal::R_RISCV_RVC_LI,

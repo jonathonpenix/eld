@@ -372,8 +372,6 @@ bool RISCVLDBackend::doRelaxationQCCall(Relocation *reloc) {
 
   Fragment *frag = reloc->targetRef()->frag();
   RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
-  // FIXME: Why is this `return true;` instead of false?
-  // I guess it doesn't really matter since we don't do anything with it...
   if (!region)
     return true;
   uint64_t offset = reloc->targetRef()->offset();
@@ -527,8 +525,6 @@ bool RISCVLDBackend::doRelaxationLui(Relocation *reloc, Relocator::DWord G) {
 
       // Replace encoding and relocation type, keep the register.
       unsigned compressed = 0x6001u | rd << 7;
-      // FIXME: why doesn't this have a replace insn or similar? Does it even
-      // matter?
       reloc->setTargetData(compressed);
       reloc->setType(ELF::riscv::internal::R_RISCV_RVC_LUI);
       relaxDeleteBytes("RISCV_LUI_C", *region, offset + 2, 2,
@@ -888,19 +884,26 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   if (!BaseReloc)
     return false;
 
+  // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
+  // this relaxation should work in the presence of a non-zero addend. Bail out
+  // if we see a non-zero addend to be safe. R_RISCV_PCREL_HI20 must have an
+  // addend of 0 so there's no similar concern there.
+  if (BaseReloc->addend())
+    return false;
+
   uint64_t Offset = Reloc.targetRef()->offset();
   StringRef SymName = BaseReloc->symInfo()->name();
 
-  // FIXME: I think the separate checks are needed?
   // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
   // diff? Presumably Base, but not sure if there is an "auto look through"
+  // Apparently the symInfo might be identical between the two, but think should
+  // prefer base just for consistency/clarity/erring on the safe side
   if (Reloc.symInfo()->isAbsolute() || Reloc.symInfo()->isWeakUndef()) {
     bool CanRelaxToAddi = config().options().getRISCVRelax() &&
                           llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
     uint64_t Instr = Reloc.target();
-    // FIXME: is this right or did I copy-paste this blindly?
     // FIXME: this isn't always right, don't know yet which instruction we're
-    // looking at
+    // looking at. rd for addi is the important thing here
     unsigned rd = (Instr >> 7) & 0x1Fu;
     bool CanRelaxToCLi = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxToC() && rd != 0 &&
@@ -944,10 +947,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     region->replaceInstruction(Offset, &Reloc,
                                reinterpret_cast<uint8_t *>(&Addi), 4);
     Reloc.setTargetData(Addi);
-    // FIXME: I think this is right? We don't care about this being pcrel given
-    // the symbol is absolute
-    // FIXME: Is this going to cause any issues having an abs reloc in what
-    // should generally be a pcrel link?
     Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
     assert(Reloc.addend() == 0 && "Unexpected non-zero addend!");
     // Report the two bytes missed if we had been able to use `c.li`.
@@ -958,7 +957,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   // FIXME: the checks that relax, etc. are enabled don't reach this code, need
   // to add checks here or hoist the ones above
 
-  // FIXME: "bound at link time"? Are there other conditions I care about?
   if (isSymbolPreemptible(*BaseReloc->symInfo()) ||
       BaseReloc->symInfo()->isIFunc())
     return false;
