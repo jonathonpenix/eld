@@ -871,8 +871,6 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
 }
 
 bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
-  // FIXME: add flag to disable this relaxation specifically?
-
   Fragment *frag = Reloc.targetRef()->frag();
   RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
   if (!region)
@@ -893,24 +891,18 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   uint64_t Offset = Reloc.targetRef()->offset();
   StringRef SymName = BaseReloc->symInfo()->name();
+  bool CanRelaxGOTLoad = config().options().getRISCVRelax() &&
+                         config().options().getRISCVRelaxGOT();
 
   // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
   // diff? Presumably Base, but not sure if there is an "auto look through"
   // Apparently the symInfo might be identical between the two, but think should
   // prefer base just for consistency/clarity/erring on the safe side
   if (Reloc.symInfo()->isAbsolute() || Reloc.symInfo()->isWeakUndef()) {
-    bool CanRelaxToAddi = config().options().getRISCVRelax() &&
-                          llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
-    uint64_t Instr = Reloc.target();
-    // FIXME: this isn't always right, don't know yet which instruction we're
-    // looking at. rd for addi is the important thing here
-    unsigned rd = (Instr >> 7) & 0x1Fu;
-    bool CanRelaxToCLi = config().options().getRISCVRelax() &&
-                         config().options().getRISCVRelaxToC() && rd != 0 &&
-                         llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
-
+    bool CanRelaxToAddi =
+        CanRelaxGOTLoad && llvm::isInt<12>(getSymbolValuePLT(*BaseReloc));
     if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
-      if (!CanRelaxToAddi && !CanRelaxToCLi) {
+      if (!CanRelaxToAddi) {
         reportMissedRelaxation("RISCV_GOT", *region, Offset, 4, SymName);
         return false;
       }
@@ -922,6 +914,11 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
     assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
            "Unexpected relocation type!");
+    uint64_t Instr = Reloc.target();
+    unsigned rd = (Instr >> 7) & 0x1Fu;
+    bool CanRelaxToCLi = CanRelaxGOTLoad &&
+                         config().options().getRISCVRelaxToC() && rd != 0 &&
+                         llvm::isInt<6>(getSymbolValuePLT(*BaseReloc));
     if (CanRelaxToCLi) {
       unsigned CLi = 0x4001u | rd << 7;
       region->replaceInstruction(Offset, &Reloc,
@@ -943,19 +940,20 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       return true;
     }
 
-    unsigned Addi = itype(ADDI, rd, X_ZERO, 0);
-    region->replaceInstruction(Offset, &Reloc,
-                               reinterpret_cast<uint8_t *>(&Addi), 4);
-    Reloc.setTargetData(Addi);
-    Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
-    assert(Reloc.addend() == 0 && "Unexpected non-zero addend!");
-    // Report the two bytes missed if we had been able to use `c.li`.
-    reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
-    return true;
-  }
+    if (CanRelaxToAddi) {
+      unsigned Addi = itype(ADDI, rd, X_ZERO, 0);
+      region->replaceInstruction(Offset, &Reloc,
+                                reinterpret_cast<uint8_t *>(&Addi), 4);
+      Reloc.setTargetData(Addi);
+      Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
+      assert(Reloc.addend() == 0 && "Unexpected non-zero addend!");
+      // Report the two bytes missed if we had been able to use `c.li`.
+      reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
+      return true;
+    }
 
-  // FIXME: the checks that relax, etc. are enabled don't reach this code, need
-  // to add checks here or hoist the ones above
+    return false;
+  }
 
   if (isSymbolPreemptible(*BaseReloc->symInfo()) ||
       BaseReloc->symInfo()->isIFunc())
@@ -963,7 +961,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   Relocator::DWord TargetSymLocation = getSymbolValuePLT(*BaseReloc);
   Relocator::DWord GOTHILocation = BaseReloc->place(m_Module);
-  if (!llvm::isInt<32>(TargetSymLocation - GOTHILocation)) {
+  if (!CanRelaxGOTLoad || !llvm::isInt<32>(TargetSymLocation - GOTHILocation)) {
     // Still report a missed relaxation as we could have avoided a GOT access
     // even if it doesn't save any bytes.
     reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
