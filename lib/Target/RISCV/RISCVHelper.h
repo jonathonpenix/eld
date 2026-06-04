@@ -175,8 +175,6 @@ template <typename T> bool isValidRVCLUIType(T Value) {
   return extractRVCLUIImmediate(encodeCI(Value)) == Value;
 }
 
-// FIXME: do I need something here for CLI?
-
 template <typename T> bool isValidRVCBType(T Value) {
   return extractRVCBImmediate(encodeCB(Value)) == Value;
 }

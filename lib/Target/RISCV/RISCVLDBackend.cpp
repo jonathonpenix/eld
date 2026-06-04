@@ -890,22 +890,18 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
   uint64_t Offset = Reloc.targetRef()->offset();
-  StringRef SymName = BaseReloc->symInfo()->name();
+  ResolveInfo *SymInfo = BaseReloc->symInfo();
+  StringRef SymName = SymInfo->name();
   bool CanRelaxGOTLoad = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
-
-  // FIXME: which reloc should be used? Reloc or Base Reloc? Does it make a
-  // diff? Presumably Base, but not sure if there is an "auto look through"
-  // Apparently the symInfo might be identical between the two, but think should
-  // prefer base just for consistency/clarity/erring on the safe side
-  if (Reloc.symInfo()->isAbsolute() || Reloc.symInfo()->isWeakUndef()) {
+  if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
     // So long as eld uses zero as an indicator of an unknown symbol value,
     // we can't perform this relaxation if we see a symbol with value zero.
     // Undefined weak symbols are an exception--they are handled as an
     // absolute symbol at address 0, but we can safely disambiguate this case.
     // FIXME: test this, I think this logic makes sense though. Test eld is 
     // consistent in that S == 0 when weak undef
-    bool SymbolValueMayBeUnknown = S == 0 && !Reloc.symInfo()->isWeakUndef();
+    bool SymbolValueMayBeUnknown = S == 0 && !SymInfo->isWeakUndef();
     bool CanRelaxToAddi =
         CanRelaxGOTLoad && !SymbolValueMayBeUnknown && llvm::isInt<12>(S);
     if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
@@ -932,7 +928,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
                                  reinterpret_cast<uint8_t *>(&CLi), 2);
       Reloc.setTargetData(CLi);
       Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
-      Reloc.setSymInfo(BaseReloc->symInfo());
+      Reloc.setSymInfo(SymInfo);
       relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
 
       if (m_Module.getPrinter()->isVerbose())
@@ -963,8 +959,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     return false;
   }
 
-  if (isSymbolPreemptible(*BaseReloc->symInfo()) ||
-      BaseReloc->symInfo()->isIFunc())
+  if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
     return false;
 
   // Again avoid relaxing symbols with value zero in case they indicate a symbol
