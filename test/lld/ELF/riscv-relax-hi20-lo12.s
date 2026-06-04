@@ -4,8 +4,6 @@
 ## with the lld output:
 ## -- We don't gp-relax at the exact maximum distance for now,
 ## -- We don't relax the exact zero,
-## FIXME: I remember seeing comments like ^ elsewhere. Does this break us in
-## similar ways for the got load relax thing? ex: if the absolute symbol is 0 (but not weak undef)?
 ## -- __global_pointer$ must be defined in the linker script.
 ## In addition, I added test cases for zero-page boundaries.
 # RUN: rm -rf %t && split-file %s %t && cd %t
