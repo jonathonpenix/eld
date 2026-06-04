@@ -883,9 +883,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     return false;
 
   // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
-  // this relaxation should work in the presence of a non-zero addend. Bail out
-  // if we see a non-zero addend to be safe. R_RISCV_PCREL_HI20 must have an
-  // addend of 0 so there's no similar concern there.
+  // this relaxation should work in the presence of a non-zero addend so avoid
+  // doing so to be safe.
   if (BaseReloc->addend())
     return false;
 
@@ -925,6 +924,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
                                  reinterpret_cast<uint8_t *>(&CLi), 2);
       Reloc.setTargetData(CLi);
       Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
+      Reloc.setSymInfo(BaseReloc->symInfo());
       relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
 
       if (m_Module.getPrinter()->isVerbose())
@@ -1174,6 +1174,9 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (!(nextRelax && relaxation_pass == RELAXATION_PC))
             break;
           llvm::SmallVector<const Relocation *, 1> LORelocs;
+          // FIXME: wonder if also need to check that all matching los are the right type
+          // in practice this shouldn't matter at all, but I think in theory you could
+          // write something like this (see ex: LLVM relocation.s in that it is accepted asm)
           findMatchingLORelocations(relocation, LORelocs);
           if (!LORelocs.empty() && llvm::all_of(LORelocs, getRelaxAtOffset))
             doRelaxationGOT(*relocation);

@@ -1117,18 +1117,9 @@ RISCVRelocator::Result applyCompressedLI(Relocation &pReloc,
                                          RISCVLDBackend &Backend,
                                          RISCVRelocator &Parent,
                                          RelocationDescription &pRelocDesc) {
-  const Relocation *HIReloc = Backend.getBaseReloc(pReloc);
-  if (!HIReloc)
-    return Relocator::BadReloc;
-
-  // FIXME: I don't think there should ever be an addend for what this is used
-  // for? It should just be the value? Is there something I'm missing?
-  // The other awkward thing is, which addend would even be appropriate?
-  // - pcrel lo should always be addend = 0
-  // - I guess the got formula is technically G + GOT + A - P so maybe there
-  //   can be a non-zero addend?
-  return ApplyReloc(pReloc, Backend.getSymbolValuePLT(*HIReloc), pRelocDesc,
-                    Backend.config(), Parent);
+  int64_t S = Backend.getSymbolValuePLT(pReloc);
+  int64_t A = pReloc.addend();
+  return ApplyReloc(pReloc, S + A, pRelocDesc, Backend.config(), Parent);
 }
 
 Relocator::Result unsupported(Relocation &pReloc, RISCVLDBackend &,

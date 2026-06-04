@@ -135,8 +135,33 @@ uint64_t doRelocHelper(const RelocationInfo &RelocInfo, uint64_t Instruction,
   case EncTy_CJ:
     Value = encodeCJ(Value);
     break;
+<<<<<<< HEAD
   case EncTy_CI:
     Value = encodeCI(Value);
+=======
+  case EncTy_CI: {
+    // FIXME: What is this? I should be hitting this with c.li probably?
+    // Technically, I think it'd be safe to leave this as-is, but I think it is confusing.
+    // Consider refactoring this as a NFC before making the change
+    // FIXME: Oh, maybe this is wrong for small positive values since it should be less
+    // than 12 bits (since c.li) then we just write out the instruction as imm 0x0
+    // FIXME: the other interesting question here is what is the point of the `c.lui rd, 0`?
+    // Why can't we have deleted the lui altogether instead?
+    // I think lld does this to some extent: https://github.com/llvm/llvm-project/commit/631769f2a05a082eafa03b7f99502381da704d7d
+    if (Value >> 12 == 0) {
+      // `c.lui rd, 0` is illegal, convert to `c.li rd, 0`
+      // FIXME: Remove below comments, refactor this?
+      // FIXME: why is this special cased rather than use clearImmediateBits
+      // & 0x0F83 is clearing immediate + opcode bits
+      // | 0x4000 is setting the c.li opcode
+      return (Instruction & 0x0F83) | 0x4000;
+    } else {
+      // FIXME: remove comment below
+      // This is clearing just the immediate bits
+      Instruction &= 0xEF83;
+      Value = encodeCI(Value);
+    }
+>>>>>>> c6c0ce52 (more FIXMEs, try to simplify CLI reloc handling)
     break;
   case EncTy_QC_EB:
     Value = encodeQCEB(Value);
