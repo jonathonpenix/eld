@@ -1164,8 +1164,9 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (nextRelax->type() != llvm::ELF::R_RISCV_RELAX)
             nextRelax = nullptr;
         }
-        auto getRelaxAtOffset = [&rs](uint64_t Offset) {
-          return rs->getLink()->findRelocation(Offset, llvm::ELF::R_RISCV_RELAX);
+        auto getRelaxFromReloc = [&rs](const Relocation *R) {
+          return rs->getLink()->findRelocation(R->targetRef()->offset(),
+                                               llvm::ELF::R_RISCV_RELAX);
         };
 
         // try to relax
@@ -1180,11 +1181,12 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (!(nextRelax && relaxation_pass == RELAXATION_PC))
             break;
           llvm::SmallVector<const Relocation *, 1> LORelocs;
-          // FIXME: wonder if also need to check that all matching los are the right type
-          // in practice this shouldn't matter at all, but I think in theory you could
-          // write something like this (see ex: LLVM relocation.s in that it is accepted asm)
           findMatchingLORelocations(relocation, LORelocs);
-          if (!LORelocs.empty() && llvm::all_of(LORelocs, getRelaxAtOffset))
+          auto isRelaxableLO = [&getRelaxFromReloc](const Relocation *R) {
+            return R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+                   getRelaxFromReloc(R);
+          };
+          if (!LORelocs.empty() && llvm::all_of(LORelocs, isRelaxableLO))
             doRelaxationGOT(*relocation);
           break;
         }
@@ -1197,7 +1199,7 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
             break;
 
           if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20) {
-            if (getRelaxAtOffset(HIReloc->targetRef()->offset()))
+            if (getRelaxFromReloc(HIReloc))
               doRelaxationGOT(*relocation);
           } else {
             doRelaxationPC(relocation, GP);
@@ -1229,7 +1231,7 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
             // R_RISCV_TLSDESC_HI20 relocation.
             if (type != llvm::ELF::R_RISCV_TLSDESC_HI20)
               if (const Relocation *HIReloc = getBaseReloc(*relocation))
-                nextRelax = getRelaxAtOffset(HIReloc->targetRef()->offset());
+                nextRelax = getRelaxFromReloc(HIReloc);
             // Note that doRelaxationTLSDESC is used for both optimizations and
             // relaxations, therefore this function should be called regardless
             // of whether relaxations are enabled.
