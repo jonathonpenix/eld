@@ -276,8 +276,8 @@ template <typename T> T encodeCJ(T Result) {
 }
 
 template <typename T> T encodeCI(T Result) {
-  uint16_t Imm17 = extractBits(Result, 17, 17) << 12;
-  uint16_t Imm16_12 = extractBits(Result, 16, 12) << 2;
+  uint16_t Imm17 = extractBits(Result, 5, 5) << 12;
+  uint16_t Imm16_12 = extractBits(Result, 4, 0) << 2;
   Result = Imm17 | Imm16_12;
   return Result;
 }

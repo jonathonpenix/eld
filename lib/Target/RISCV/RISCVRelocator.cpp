@@ -1106,8 +1106,8 @@ RISCVRelocator::Result applyCompressedLUI(Relocation &pReloc,
   uint64_t Result = Backend.getSymbolValuePLT(pReloc) + pReloc.addend();
   // The bottom 12 bits are signed.
   uint64_t LoImm = llvm::SignExtend64<12>(Result);
-  return ApplyReloc(pReloc, Result - LoImm, pRelocDesc, Backend.config(),
-                    Parent);
+  return ApplyReloc(pReloc, (Result - LoImm) >> 12, pRelocDesc,
+                    Backend.config(), Parent);
 }
 
 Relocator::Result unsupported(Relocation &pReloc, RISCVLDBackend &,
