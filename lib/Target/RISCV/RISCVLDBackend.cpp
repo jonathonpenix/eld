@@ -1106,6 +1106,7 @@ void RISCVLDBackend::translatePseudoRelocation(Relocation *reloc) {
   Relocation *reloc_jalr = Relocation::Create(llvm::ELF::R_RISCV_PCREL_LO12_I,
                                               32, fragRef, reloc->addend());
   m_BaseRelocs[reloc_jalr] = reloc;
+  m_BaseRelocRefs[reloc].push_back(reloc_jalr);
   reloc_jalr->setSymInfo(reloc->symInfo());
   m_InternalRelocs.push_back(reloc_jalr);
 }
@@ -1180,13 +1181,14 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
         case llvm::ELF::R_RISCV_GOT_HI20: {
           if (!(nextRelax && relaxation_pass == RELAXATION_PC))
             break;
-          llvm::SmallVector<const Relocation *, 1> LORelocs;
-          findMatchingLORelocations(relocation, LORelocs);
           auto isRelaxableLO = [&getRelaxFromReloc](const Relocation *R) {
             return R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
                    getRelaxFromReloc(R);
           };
-          if (!LORelocs.empty() && llvm::all_of(LORelocs, isRelaxableLO))
+          const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
+              getBaseRelocRefs(*relocation);
+          if (LORelocs && !LORelocs->empty() &&
+              llvm::all_of(*LORelocs, isRelaxableLO))
             doRelaxationGOT(*relocation);
           break;
         }
@@ -1441,6 +1443,7 @@ bool RISCVLDBackend::handleRelocation(ELFSection *pSection,
         getRelocator(), pSection, pType, *hi_reloc->symInfo()->outSymbol(),
         pOffset, pAddend);
     m_BaseRelocs[reloc] = hi_reloc;
+    m_BaseRelocRefs[hi_reloc].push_back(reloc);
     if (reloc) {
       reloc->setSymInfo(hi_reloc->symInfo());
       pSection->addRelocation(reloc);
