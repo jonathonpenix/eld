@@ -13,7 +13,7 @@ REQUIRES: riscv32 || riscv64
 RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
 
 ## Absolute symbol relaxation (static executable)
-RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --verbose -MapStyle txt -Map %t.map \
+RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --defsym sym_zero=0 --verbose -MapStyle txt -Map %t.map \
 RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=ABS-VERBOSE
 
 ABS-VERBOSE:      RISCV_GOT : Deleting 4 bytes for symbol 'sym'
@@ -24,20 +24,25 @@ ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_neg'
 ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_neg
 ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
 ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
 ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
 ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
 
-RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=ABS-DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.out | %filecheck %s --check-prefix=ABS-DUMP
 
 ABS-DUMP: c.li {{a[0-9]+}}, 5
 ABS-DUMP: c.li {{a[0-9]+}}, -31
 ABS-DUMP: addi {{a[0-9]+}}, zero, 32
+ABS-DUMP: auipc {{a[0-9]+}},
+ABS-DUMP-NEXT: R_RISCV_GOT_HI20 sym_zero
+ABS-DUMP: {{l[wd]}} {{a[0-9]+}},
+ABS-DUMP-NEXT: R_RISCV_PCREL_LO12_I sym_zero
 ABS-DUMP: c.li {{a[0-9]+}}, 0
-ABS-DUMP-NOT: auipc
 
 RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
 MAP: # RelaxationBytesDeleted : 22
+MAP: # RelaxationBytesMissed : 6
 
 ## Weak undefined symbol in a shared object — must not be relaxed
 RUN: %link %linkopts -shared --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
@@ -54,7 +59,7 @@ DSO-DUMP-NOT:  c.li
 
 ## Absolute symbol relaxation with --no-relax-c (static executable)
 ## All symbols that would use c.li fall back to addi instead.
-RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 \
+RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --defsym sym_zero=0 \
 RUN:   --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN:   %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefix=NRC-VERBOSE
 
@@ -64,18 +69,22 @@ NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_neg'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_neg'
 NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
+NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_wu'
 
-RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.norelaxc.out | %filecheck %s --check-prefix=NRC-DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefix=NRC-DUMP
 
 NRC-DUMP: addi {{a[0-9]+}}, zero, 5
 NRC-DUMP: addi {{a[0-9]+}}, zero, -31
 NRC-DUMP: addi {{a[0-9]+}}, zero, 32
+NRC-DUMP: auipc {{a[0-9]+}},
+NRC-DUMP-NEXT: R_RISCV_GOT_HI20 sym_zero
+NRC-DUMP: {{l[wd]}} {{a[0-9]+}},
+NRC-DUMP-NEXT: R_RISCV_PCREL_LO12_I sym_zero
 NRC-DUMP: addi {{a[0-9]+}}, zero, 0
-NRC-DUMP-NOT: auipc
 NRC-DUMP-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=NRC-MAP
 NRC-MAP: # RelaxationBytesDeleted : 16
-NRC-MAP: # RelaxationBytesMissed : 8
+NRC-MAP: # RelaxationBytesMissed : 12
