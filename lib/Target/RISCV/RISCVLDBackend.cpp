@@ -873,17 +873,16 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   llvm::dbgs() << "In do relax got\n";
 
-  // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
-  // this relaxation should work in the presence of a non-zero addend so avoid
-  // doing so to be safe. R_RISCV_PCREL_LO12_I should also never have a non-zero
-  // addend.
-  if (Reloc.addend())
-    return false;
-
   const Relocation *BaseReloc = Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20
                                     ? &Reloc
                                     : getBaseReloc(Reloc);
   if (!BaseReloc)
+    return false;
+
+  // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
+  // this relaxation should work in the presence of a non-zero addend so avoid
+  // doing so to be safe.
+  if (BaseReloc->addend())
     return false;
 
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);

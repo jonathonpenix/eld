@@ -191,7 +191,7 @@ public:
       return nullptr;
     return reloc->second;
   }
- 
+
   const Relocation *
   getNewBaseForTLSDESCRelaxation(const Relocation &BaseReloc) const {
     auto It = m_HiToIELoadBase.find(&BaseReloc);
@@ -203,14 +203,6 @@ public:
   void setNewBaseForTLSDESCRelaxation(const Relocation &R) {
     const Relocation *HIReloc = getBaseReloc(R);
     m_HiToIELoadBase[HIReloc] = &R;
-  }
-
-  void setRelocGOTLoadRelaxed(const Relocation *R) {
-    m_RelaxedGOTLoadRelocs.insert(R);
-  }
-
-  bool relocWasGOTLoadRelaxed(const Relocation *R) const {
-    return m_RelaxedGOTLoadRelocs.count(R);
   }
 
   // Get the value of the symbol, using the PLT slot if one exists.
@@ -283,6 +275,14 @@ private:
     if (Refs == m_BaseRelocRefs.end())
       return nullptr;
     return &Refs->second;
+  }
+
+  void setRelocGOTLoadRelaxed(const Relocation *R) {
+    m_RelaxedGOTLoadRelocs.insert(R);
+  }
+
+  bool relocWasGOTLoadRelaxed(const Relocation *R) const {
+    return m_RelaxedGOTLoadRelocs.count(R);
   }
 
   bool allGOTLOsRelaxable(const Relocation &HIReloc, const ELFSection *S) const;
