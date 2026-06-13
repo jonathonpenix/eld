@@ -205,14 +205,6 @@ public:
     m_HiToIELoadBase[HIReloc] = &R;
   }
 
-  const llvm::SmallVectorImpl<const Relocation *> *
-  getBaseRelocRefs(const Relocation &R) const {
-    auto Refs = m_BaseRelocRefs.find(&R);
-    if (Refs == m_BaseRelocRefs.end())
-      return nullptr;
-    return &Refs->second;
-  }
-
   void setRelocGOTLoadRelaxed(const Relocation *R) {
     m_RelaxedGOTLoadRelocs.insert(R);
   }
@@ -284,6 +276,14 @@ private:
 
   /// postProcessing - Backend can do any needed modification in the final stage
   eld::Expected<void> postProcessing(llvm::FileOutputBuffer &pOutput) override;
+
+  const llvm::SmallVectorImpl<const Relocation *> *
+  getBaseRelocRefs(const Relocation &R) const {
+    auto Refs = m_BaseRelocRefs.find(&R);
+    if (Refs == m_BaseRelocRefs.end())
+      return nullptr;
+    return &Refs->second;
+  }
 
   bool allGOTLOsRelaxable(const Relocation &HIReloc, const ELFSection *S) const;
 

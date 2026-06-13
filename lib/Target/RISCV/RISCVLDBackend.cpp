@@ -2002,7 +2002,6 @@ RISCVLDBackend::postProcessing(llvm::FileOutputBuffer &pOutput) {
 
 bool RISCVLDBackend::allGOTLOsRelaxable(const Relocation &HIReloc,
                                         const ELFSection *S) const {
-  // FIXME: decide if want it to be a ref or not
   const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
       getBaseRelocRefs(HIReloc);
   if (!LORelocs || LORelocs->empty())
