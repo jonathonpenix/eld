@@ -1,0 +1,19 @@
+REQUIRES: riscv32 || riscv64
+
+# BUG: A weak undefined symbol in a shared object should NOT be GOT-relaxed
+# because the dynamic linker may provide a non-zero value for it at load time.
+# The correct output would be an unrelaxed auipc+lw/ld pair with a dynamic
+# relocation. This test documents the current (incorrect) behavior and should
+# be updated when the bug is fixed.
+
+RUN: %clang %clangopts -c %p/Inputs/weak_undef.s -o %t.o
+RUN: %link %linkopts -shared --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=VERBOSE
+
+VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
+VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=DUMP
+
+# BUG: should be an unrelaxed auipc+lw/ld, not c.li
+DUMP: c.li {{a[0-9]+}}, 0
+DUMP-NOT: auipc
