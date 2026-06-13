@@ -9,6 +9,7 @@ _start:
     lga a0, sym
     lga a1, sym_neg
     lga a2, sym_addi
+    lga a4, sym_addi_neg
     lga a3, sym_zero
 
 .global foo
