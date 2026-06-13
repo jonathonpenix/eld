@@ -16,17 +16,17 @@ RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
 RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --verbose -MapStyle txt -Map %t.map \
 RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=ABS-VERBOSE
 
-ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym'
-ABS-VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym'
-ABS-VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym
-ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_neg'
-ABS-VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_neg'
-ABS-VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_neg
-ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
-ABS-VERBOSE: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
-ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
-ABS-VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
-ABS-VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
+ABS-VERBOSE:      RISCV_GOT : Deleting 4 bytes for symbol 'sym'
+ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym'
+ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_neg'
+ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_neg'
+ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_neg
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
+ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
+ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=ABS-DUMP
 
