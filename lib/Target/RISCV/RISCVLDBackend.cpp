@@ -894,6 +894,10 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
 
   llvm::dbgs() << (SymInfo->isAbsolute() ? "abs\n" : "not abs\n");
   llvm::dbgs() << (SymInfo->isWeakUndef() ? "weakundef\n" : "not weakundef\n");
+  // FIXME: are absolute/weakundef actually orthogonal to pre-emptible?
+  // I don't think absolute are (SH_ABS?) but I think weakundef can be based on
+  // the fact that they're specially handled in isSymbolPreemptible... so we
+  // need to check that earlier.
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
     // So long as eld uses zero as an indicator of an unknown symbol value,
     // we can't perform this relaxation if we see a symbol with value zero.

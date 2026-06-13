@@ -1,0 +1,30 @@
+REQUIRES: riscv32 || riscv64
+
+# Relax GOT loads of absolute symbols. Depending on the symbol value:
+#   - fits in 6-bit signed: the auipc is deleted and the lw/ld is compressed
+#     to c.li (6 bytes total saved).
+#   - fits in 12-bit signed but not 6-bit: the auipc is deleted and the lw/ld
+#     is rewritten to addi rd, zero, <value> (4 bytes saved).
+
+RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
+RUN: %link %linkopts --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --verbose -MapStyle txt -Map %t.map \
+RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
+
+VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym'
+VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym'
+VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym
+VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_neg'
+VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_neg'
+VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_neg
+VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
+VERBOSE: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=DUMP
+
+DUMP: c.li {{a[0-9]+}}, 5
+DUMP: c.li {{a[0-9]+}}, -31
+DUMP: addi {{a[0-9]+}}, zero, 32
+DUMP-NOT: auipc
+
+RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
+MAP: # RelaxationBytesDeleted : 16
