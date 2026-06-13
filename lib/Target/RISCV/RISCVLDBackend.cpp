@@ -24,6 +24,7 @@
 #include "eld/Input/ELFObjectFile.h"
 #include "eld/Object/ObjectBuilder.h"
 #include "eld/Object/ObjectLinker.h"
+#include "eld/Readers/ELFSection.h"
 #include "eld/Support/Memory.h"
 #include "eld/Support/MemoryArea.h"
 #include "eld/Support/MsgHandling.h"
@@ -864,11 +865,13 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
   return false;
 }
 
-bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
+bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc, const ELFSection *Link) {
   Fragment *frag = Reloc.targetRef()->frag();
   RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
   if (!region)
     return false;
+
+  llvm::dbgs() << "In do relax got\n";
 
   // The calculation for R_RISCV_GOT_HI20 is `G + GOT + A - P`. It's unclear how
   // this relaxation should work in the presence of a non-zero addend so avoid
@@ -883,19 +886,31 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   if (!BaseReloc)
     return false;
 
+  auto isRelaxableLO = [&](const Relocation *R) {
+    return (R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I ||
+            relocWasGOTLoadRelaxed(R)) &&
+          Link->findRelocation(R->targetRef()->offset(),
+                                         llvm::ELF::R_RISCV_RELAX);
+  };
+  const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
+      getBaseRelocRefs(*BaseReloc);
+  if (LORelocs && !LORelocs->empty() && llvm::all_of(*LORelocs, isRelaxableLO))
+    return false;
+
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
   uint64_t Offset = Reloc.targetRef()->offset();
   ResolveInfo *SymInfo = BaseReloc->symInfo();
   StringRef SymName = SymInfo->name();
   bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
+
+  llvm::dbgs() << (SymInfo->isAbsolute() ? "abs\n" : "not abs\n");
+  llvm::dbgs() << (SymInfo->isWeakUndef() ? "weakundef\n" : "not weakundef\n");
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
     // So long as eld uses zero as an indicator of an unknown symbol value,
     // we can't perform this relaxation if we see a symbol with value zero.
     // Undefined weak symbols are an exception--they are handled as an
     // absolute symbol at address 0, but we can safely disambiguate this case.
-    // FIXME: test this, I think this logic makes sense though. Test eld is
-    // consistent in that S == 0 when weak undef
     bool SymbolValueMayBeUnknown = S == 0 && !SymInfo->isWeakUndef();
     bool CanRelaxToAddi =
         GOTRelaxEnabled && !SymbolValueMayBeUnknown && llvm::isInt<12>(S);
@@ -905,8 +920,10 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
         return false;
       }
 
+      llvm::dbgs() << "Relaxing the got hi for abs/weak undef\n";
       Reloc.setType(llvm::ELF::R_RISCV_NONE);
       relaxDeleteBytes("RISCV_GOT", *region, Offset, 4, SymName);
+      setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
 
@@ -935,6 +952,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
                    ->getInput()
                    ->decoratedPath();
 
+      llvm::dbgs() << "Relaxing to CLI abs\n";
+      setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
 
@@ -946,11 +965,15 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
       // Report the two bytes missed if we had been able to use `c.li`.
       reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
+      llvm::dbgs() << "Relaxing to addi abs\n";
+      setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
 
     return false;
   }
+
+  llvm::dbgs() << "Checking PCrel\n";
 
   if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
     return false;
@@ -968,11 +991,15 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   }
 
   if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
+    llvm::dbgs() << "Rewriting the got hi\n";
     assert((Reloc.target() & 0x7Fu) == 0x17 &&
            "Expected an auipc instruction!");
     Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
+    setRelocGOTLoadRelaxed(&Reloc);
     return true;
   }
+
+  llvm::dbgs() << "Rewriting the GOT lo\n";
 
   assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
          "Unexpected relocation type!");
@@ -981,7 +1008,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   region->replaceInstruction(Offset, &Reloc, reinterpret_cast<uint8_t *>(&Addi),
                              4);
   Reloc.setTargetData(Addi);
-
+  setRelocGOTLoadRelaxed(&Reloc);
   return true;
 }
 
@@ -1168,18 +1195,8 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           break;
         }
         case llvm::ELF::R_RISCV_GOT_HI20: {
-          if (!(nextRelax && relaxation_pass == RELAXATION_PC))
-            break;
-          auto isRelaxableLO = [&rs](const Relocation *R) {
-            return R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
-                   rs->getLink()->findRelocation(R->targetRef()->offset(),
-                                                 llvm::ELF::R_RISCV_RELAX);
-          };
-          const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
-              getBaseRelocRefs(*relocation);
-          if (LORelocs && !LORelocs->empty() &&
-              llvm::all_of(*LORelocs, isRelaxableLO))
-            doRelaxationGOT(*relocation);
+          if (nextRelax && relaxation_pass == RELAXATION_PC)
+            doRelaxationGOT(*relocation, rs->getLink());
           break;
         }
         case llvm::ELF::R_RISCV_PCREL_LO12_I: {
@@ -1190,10 +1207,11 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (!HIReloc)
             break;
 
-          if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20) {
+          if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20 ||
+              relocWasGOTLoadRelaxed(HIReloc)) {
             if (rs->getLink()->findRelocation(HIReloc->targetRef()->offset(),
                                               llvm::ELF::R_RISCV_RELAX))
-              doRelaxationGOT(*relocation);
+              doRelaxationGOT(*relocation, rs->getLink());
           } else {
             doRelaxationPC(relocation, GP);
           }

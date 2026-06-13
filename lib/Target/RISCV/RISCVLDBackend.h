@@ -15,6 +15,7 @@
 #include "eld/Readers/ELFSection.h"
 #include "eld/SymbolResolver/IRBuilder.h"
 #include "eld/Target/GNULDBackend.h"
+#include "llvm/ADT/DenseSet.h"
 #include <unordered_set>
 
 namespace eld {
@@ -190,15 +191,7 @@ public:
       return nullptr;
     return reloc->second;
   }
-
-  const llvm::SmallVectorImpl<const Relocation *> *
-  getBaseRelocRefs(const Relocation &R) const {
-    auto Refs = m_BaseRelocRefs.find(&R);
-    if (Refs == m_BaseRelocRefs.end())
-      return nullptr;
-    return &Refs->second;
-  }
-
+ 
   const Relocation *
   getNewBaseForTLSDESCRelaxation(const Relocation &BaseReloc) const {
     auto It = m_HiToIELoadBase.find(&BaseReloc);
@@ -210,6 +203,22 @@ public:
   void setNewBaseForTLSDESCRelaxation(const Relocation &R) {
     const Relocation *HIReloc = getBaseReloc(R);
     m_HiToIELoadBase[HIReloc] = &R;
+  }
+
+  const llvm::SmallVectorImpl<const Relocation *> *
+  getBaseRelocRefs(const Relocation &R) const {
+    auto Refs = m_BaseRelocRefs.find(&R);
+    if (Refs == m_BaseRelocRefs.end())
+      return nullptr;
+    return &Refs->second;
+  }
+
+  void setRelocGOTLoadRelaxed(const Relocation *R) {
+    m_RelaxedGOTLoadRelocs.insert(R);
+  }
+
+  bool relocWasGOTLoadRelaxed(const Relocation *R) {
+    return m_RelaxedGOTLoadRelocs.count(R);
   }
 
   // Get the value of the symbol, using the PLT slot if one exists.
@@ -243,7 +252,7 @@ private:
   bool doRelaxationAlign(Relocation *R);
 
   bool doRelaxationPC(Relocation *R, Relocation::DWord G);
-  bool doRelaxationGOT(Relocation &R);
+  bool doRelaxationGOT(Relocation &R, const ELFSection *Link);
 
   bool doRelaxationTLSDESC(Relocation &R, bool Relax);
 
@@ -295,11 +304,6 @@ private:
   /// relocations consisting of a HI20 and LO12 pairs.
   llvm::DenseMap<const Relocation *, const Relocation *> m_BaseRelocs;
 
-  /// A map to keep track of all relocations referencing a particular
-  /// base relocation. This is effectively a reverse-mapping of `m_BaseRelocs`.
-  llvm::DenseMap<const Relocation *, llvm::SmallVector<const Relocation *, 1>>
-      m_BaseRelocRefs;
-
 private:
   /// RISCV Attribute Section
   ELFSection *m_pRISCVAttributeSection = nullptr;
@@ -329,6 +333,13 @@ private:
   // A map from HI relocations to the relocations that should be used as a base
   // address for the load instruction during TLSDESC to IE optimization.
   std::unordered_map<const Relocation *, const Relocation *> m_HiToIELoadBase;
+
+  // A map to keep track of all relocations referencing a particular
+  // base relocation. This is effectively a reverse-mapping of `m_BaseRelocs`.
+  llvm::DenseMap<const Relocation *, llvm::SmallVector<const Relocation *, 1>>
+      m_BaseRelocRefs;
+
+  llvm::DenseSet<const Relocation *> m_RelaxedGOTLoadRelocs;
 };
 } // namespace eld
 
