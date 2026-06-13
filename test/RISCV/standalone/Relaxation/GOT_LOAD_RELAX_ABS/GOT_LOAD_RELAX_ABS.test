@@ -24,12 +24,16 @@ ABS-VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_neg'
 ABS-VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_neg
 ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi'
 ABS-VERBOSE: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi'
+ABS-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
+ABS-VERBOSE: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
+ABS-VERBOSE: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=ABS-DUMP
 
 ABS-DUMP: c.li {{a[0-9]+}}, 5
 ABS-DUMP: c.li {{a[0-9]+}}, -31
 ABS-DUMP: addi {{a[0-9]+}}, zero, 32
+ABS-DUMP: c.li {{a[0-9]+}}, 0
 ABS-DUMP-NOT: auipc
 
 RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
