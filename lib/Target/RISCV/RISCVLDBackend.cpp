@@ -871,8 +871,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   if (!region)
     return false;
 
-  llvm::dbgs() << "In do relax got\n";
-
   const Relocation *BaseReloc = Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20
                                     ? &Reloc
                                     : getBaseReloc(Reloc);
@@ -894,9 +892,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   StringRef SymName = SymInfo->name();
   bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
-
-  llvm::dbgs() << (SymInfo->isAbsolute() ? "abs\n" : "not abs\n");
-  llvm::dbgs() << (SymInfo->isWeakUndef() ? "weakundef\n" : "not weakundef\n");
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
     // So long as eld uses zero as an indicator of an unknown symbol value,
     // we can't perform this relaxation if we see a symbol with value zero.
@@ -911,7 +906,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
         return false;
       }
 
-      llvm::dbgs() << "Relaxing the got hi for abs/weak undef\n";
       Reloc.setType(llvm::ELF::R_RISCV_NONE);
       relaxDeleteBytes("RISCV_GOT", *region, Offset, 4, SymName);
       setRelocGOTLoadRelaxed(&Reloc);
@@ -943,7 +937,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
                    ->getInput()
                    ->decoratedPath();
 
-      llvm::dbgs() << "Relaxing to CLI abs\n";
       setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
@@ -956,15 +949,12 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
       // Report the two bytes missed if we had been able to use `c.li`.
       reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
-      llvm::dbgs() << "Relaxing to addi abs\n";
       setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
 
     return false;
   }
-
-  llvm::dbgs() << "Checking PCrel\n";
 
   // Again avoid relaxing symbols with value zero in case they indicate a symbol
   // with an unknown value. Make an exception for RV32 as a
@@ -979,15 +969,12 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   }
 
   if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
-    llvm::dbgs() << "Rewriting the got hi\n";
     assert((Reloc.target() & 0x7Fu) == 0x17 &&
            "Expected an auipc instruction!");
     Reloc.setType(llvm::ELF::R_RISCV_PCREL_HI20);
     setRelocGOTLoadRelaxed(&Reloc);
     return true;
   }
-
-  llvm::dbgs() << "Rewriting the GOT lo\n";
 
   assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
          "Unexpected relocation type!");
