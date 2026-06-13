@@ -44,18 +44,33 @@ RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
 MAP: # RelaxationBytesDeleted : 22
 MAP: # RelaxationBytesMissed : 6
 
-## Weak undefined symbol in a shared object — must not be relaxed
-RUN: %link %linkopts -shared --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
+## Weak undefined and absolute symbols in a shared object — must not be relaxed.
+## isSymbolPreemptible returns true for all globally-visible symbols in a DSO,
+## so GOT relaxation is suppressed regardless of whether the symbol is absolute
+## or weak undefined.
+RUN: %link %linkopts -shared \
+RUN:   --defsym sym=5 --defsym sym_neg=-31 --defsym sym_addi=32 --defsym sym_zero=0 \
+RUN:   --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 
-DSO-VERBOSE-NOT: RISCV_GOT : Deleting {{.*}} bytes for symbol 'sym_wu'
-DSO-VERBOSE-NOT: RISCV_LI_C : {{.*}} symbol sym_wu
+DSO-VERBOSE-NOT: RISCV_GOT : Deleting
+DSO-VERBOSE-NOT: RISCV_LI_C :
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=DSO-DUMP
 
+DSO-DUMP:      <_start>:
+DSO-DUMP-NEXT: auipc {{a[0-9]+}},
+DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+DSO-DUMP-NEXT: auipc {{a[0-9]+}},
+DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+DSO-DUMP-NEXT: auipc {{a[0-9]+}},
+DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+DSO-DUMP-NEXT: auipc {{a[0-9]+}},
+DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP:      <foo>:
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NOT:  c.li
+DSO-DUMP-NOT:  addi {{a[0-9]+}}, zero,
 
 ## Absolute symbol relaxation with --no-relax-c (static executable)
 ## All symbols that would use c.li fall back to addi instead.
