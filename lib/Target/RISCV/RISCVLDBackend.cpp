@@ -885,19 +885,18 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   if (BaseReloc->addend())
     return false;
 
+  ResolveInfo *SymInfo = BaseReloc->symInfo();
+  if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
+    return false;
+
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
   uint64_t Offset = Reloc.targetRef()->offset();
-  ResolveInfo *SymInfo = BaseReloc->symInfo();
   StringRef SymName = SymInfo->name();
   bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
 
   llvm::dbgs() << (SymInfo->isAbsolute() ? "abs\n" : "not abs\n");
   llvm::dbgs() << (SymInfo->isWeakUndef() ? "weakundef\n" : "not weakundef\n");
-  // FIXME: are absolute/weakundef actually orthogonal to pre-emptible?
-  // I don't think absolute are (SH_ABS?) but I think weakundef can be based on
-  // the fact that they're specially handled in isSymbolPreemptible... so we
-  // need to check that earlier.
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
     // So long as eld uses zero as an indicator of an unknown symbol value,
     // we can't perform this relaxation if we see a symbol with value zero.
@@ -966,9 +965,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   }
 
   llvm::dbgs() << "Checking PCrel\n";
-
-  if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
-    return false;
 
   // Again avoid relaxing symbols with value zero in case they indicate a symbol
   // with an unknown value. Make an exception for RV32 as a
