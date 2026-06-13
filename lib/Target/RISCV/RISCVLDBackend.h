@@ -217,7 +217,7 @@ public:
     m_RelaxedGOTLoadRelocs.insert(R);
   }
 
-  bool relocWasGOTLoadRelaxed(const Relocation *R) {
+  bool relocWasGOTLoadRelaxed(const Relocation *R) const {
     return m_RelaxedGOTLoadRelocs.count(R);
   }
 
@@ -252,7 +252,7 @@ private:
   bool doRelaxationAlign(Relocation *R);
 
   bool doRelaxationPC(Relocation *R, Relocation::DWord G);
-  bool doRelaxationGOT(Relocation &R, const ELFSection *Link);
+  bool doRelaxationGOT(Relocation &R);
 
   bool doRelaxationTLSDESC(Relocation &R, bool Relax);
 
@@ -284,6 +284,8 @@ private:
 
   /// postProcessing - Backend can do any needed modification in the final stage
   eld::Expected<void> postProcessing(llvm::FileOutputBuffer &pOutput) override;
+
+  bool allGOTLOsRelaxable(const Relocation &HIReloc, const ELFSection *S) const;
 
 private:
   ELFSection *createGOTSection(InputFile &InputFile);

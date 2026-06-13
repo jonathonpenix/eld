@@ -865,7 +865,7 @@ bool RISCVLDBackend::isGOTReloc(const Relocation &reloc) const {
   return false;
 }
 
-bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc, const ELFSection *Link) {
+bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   Fragment *frag = Reloc.targetRef()->frag();
   RegionFragmentEx *region = llvm::dyn_cast<RegionFragmentEx>(frag);
   if (!region)
@@ -884,17 +884,6 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc, const ELFSection *Link) 
                                     ? &Reloc
                                     : getBaseReloc(Reloc);
   if (!BaseReloc)
-    return false;
-
-  auto isRelaxableLO = [&](const Relocation *R) {
-    return (R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I ||
-            relocWasGOTLoadRelaxed(R)) &&
-          Link->findRelocation(R->targetRef()->offset(),
-                                         llvm::ELF::R_RISCV_RELAX);
-  };
-  const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
-      getBaseRelocRefs(*BaseReloc);
-  if (LORelocs && !LORelocs->empty() && llvm::all_of(*LORelocs, isRelaxableLO))
     return false;
 
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
@@ -1195,8 +1184,9 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           break;
         }
         case llvm::ELF::R_RISCV_GOT_HI20: {
-          if (nextRelax && relaxation_pass == RELAXATION_PC)
-            doRelaxationGOT(*relocation, rs->getLink());
+          if (nextRelax && relaxation_pass == RELAXATION_PC &&
+              allGOTLOsRelaxable(*relocation, rs))
+            doRelaxationGOT(*relocation);
           break;
         }
         case llvm::ELF::R_RISCV_PCREL_LO12_I: {
@@ -1210,8 +1200,9 @@ void RISCVLDBackend::mayBeRelax(int relaxation_pass, bool &pFinished) {
           if (HIReloc->type() == llvm::ELF::R_RISCV_GOT_HI20 ||
               relocWasGOTLoadRelaxed(HIReloc)) {
             if (rs->getLink()->findRelocation(HIReloc->targetRef()->offset(),
-                                              llvm::ELF::R_RISCV_RELAX))
-              doRelaxationGOT(*relocation, rs->getLink());
+                                              llvm::ELF::R_RISCV_RELAX) &&
+                allGOTLOsRelaxable(*HIReloc, rs))
+              doRelaxationGOT(*relocation);
           } else {
             doRelaxationPC(relocation, GP);
           }
@@ -2007,6 +1998,22 @@ RISCVLDBackend::postProcessing(llvm::FileOutputBuffer &pOutput) {
     }
   }
   return {};
+}
+
+bool RISCVLDBackend::allGOTLOsRelaxable(const Relocation &HIReloc,
+                                        const ELFSection *S) const {
+  // FIXME: decide if want it to be a ref or not
+  const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
+      getBaseRelocRefs(HIReloc);
+  if (!LORelocs || LORelocs->empty())
+    return false;
+
+  return llvm::all_of(*LORelocs, [&](const Relocation *R) {
+    return (R->type() == llvm::ELF::R_RISCV_PCREL_LO12_I ||
+            relocWasGOTLoadRelaxed(R)) &&
+           S->getLink()->findRelocation(R->targetRef()->offset(),
+                                        llvm::ELF::R_RISCV_RELAX);
+  });
 }
 
 namespace eld {
