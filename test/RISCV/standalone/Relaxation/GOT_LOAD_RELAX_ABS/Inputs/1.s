@@ -6,9 +6,9 @@
 .text
 .global _start
 _start:
-    lga a0, sym
-    lga a1, sym_neg
-    lga a2, sym_addi
+    lga a0, sym_cli_pos
+    lga a1, sym_cli_neg
+    lga a2, sym_addi_pos
     lga a4, sym_addi_neg
     lga a3, sym_zero
 
