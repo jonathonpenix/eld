@@ -13,3 +13,4 @@ foo:
     lga a2, sym_addi_pos_oob
     lga a3, sym_addi_neg_oob
     lga a3, sym_zero
+    lga zero, sym_cli_pos

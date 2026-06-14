@@ -39,6 +39,8 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_pos_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
+VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'
+VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
@@ -58,16 +60,17 @@ DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
+DUMP-COMMON: addi zero, zero, 31
 DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
 RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-C
-MAP-C: # RelaxationBytesDeleted : 28
-MAP-C: # RelaxationBytesMissed : 20
+MAP-C: # RelaxationBytesDeleted : 32
+MAP-C: # RelaxationBytesMissed : 22
 
 RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
-MAP-NO-C: # RelaxationBytesDeleted : 24
-MAP-NO-C: # RelaxationBytesMissed : 24
+MAP-NO-C: # RelaxationBytesDeleted : 28
+MAP-NO-C: # RelaxationBytesMissed : 26
 
 ## Shared. The psABI only includes "it’s bound at link time to be within the
 ## object" as a condition for the relative case, but it is enforced in eld for
@@ -98,5 +101,7 @@ DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+DSO-DUMP-NEXT: auipc zero,
+DSO-DUMP-NEXT: {{l[wd]}} zero,
 DSO-DUMP-NOT: c.li
 DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
