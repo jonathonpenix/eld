@@ -13,8 +13,8 @@ REQUIRES: riscv32 || riscv64
 RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
 
 ## Absolute symbol relaxation (static executable)
-RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_addi_pos=32 --defsym sym_addi_neg=-33 --defsym sym_zero=0 \
-RUN:   --defsym sym_addi_pos_hi=2047 --defsym sym_addi_neg_lo=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
+RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
+RUN:   --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
 RUN:   --verbose -MapStyle txt -Map %t.map \
 RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=ABS-VERBOSE
 
@@ -24,18 +24,18 @@ ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruc
 ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg'
 ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_cli_neg'
 ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_cli_neg
-ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos'
-ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos'
-ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg'
-ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg'
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos_oob'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos_oob'
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg_oob'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_neg_oob'
 ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
 ABS-VERBOSE-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
 ABS-VERBOSE-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
-ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos_hi'
-ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos_hi'
-ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg_lo'
-ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg_lo'
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos'
+ABS-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg'
+ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg'
 ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_pos_oob'
 ABS-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_oob'
 
@@ -68,8 +68,8 @@ MAP: # RelaxationBytesMissed : 20
 ## so GOT relaxation is suppressed regardless of whether the symbol is absolute
 ## or weak undefined.
 RUN: %link %linkopts -shared \
-RUN:   --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_addi_pos=32 --defsym sym_addi_neg=-33 --defsym sym_zero=0 \
-RUN:   --defsym sym_addi_pos_hi=2047 --defsym sym_addi_neg_lo=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
+RUN:   --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
+RUN:   --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
 RUN:   --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 
 DSO-VERBOSE-NOT: RISCV_GOT : Deleting
@@ -105,8 +105,8 @@ DSO-DUMP-NOT:  addi {{a[0-9]+}}, zero,
 
 ## Absolute symbol relaxation with --no-relax-c (static executable)
 ## All symbols that would use c.li fall back to addi instead.
-RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_addi_pos=32 --defsym sym_addi_neg=-33 --defsym sym_zero=0 \
-RUN:   --defsym sym_addi_pos_hi=2047 --defsym sym_addi_neg_lo=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
+RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
+RUN:   --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
 RUN:   --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN:   %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefix=NRC-VERBOSE
 
@@ -114,17 +114,17 @@ NRC-VERBOSE:      RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos'
 NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_neg'
+NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos_oob'
+NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos_oob'
+NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg_oob'
+NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_neg_oob'
+NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
+NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
+NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_wu'
 NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos'
 NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg'
-NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
-NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
-NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_wu'
-NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos_hi'
-NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos_hi'
-NRC-VERBOSE-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg_lo'
-NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg_lo'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_pos_oob'
 NRC-VERBOSE-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_oob'
 
