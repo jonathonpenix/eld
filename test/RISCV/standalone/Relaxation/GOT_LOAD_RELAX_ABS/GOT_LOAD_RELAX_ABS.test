@@ -8,9 +8,13 @@ REQUIRES: riscv32 || riscv64
 
 RUN: %clang %clangopts -c %p/Inputs/abs.s -o %t.o
 
-## Static executable
+## Static, no-pie executable
 RUN: %link %linkopts -T %p/Inputs/abs_syms.t --verbose -MapStyle txt -Map %t.static.map \
 RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
+
+## Static, pie executable
+RUN: %link %linkopts -T %p/Inputs/abs_syms.t -static -pie --verbose -MapStyle txt -Map %t.static-pie.map \
+RUN: %t.o -o %t.static-pie.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
 
 ## Static executable with --no-relax-c
 RUN: %link %linkopts -T %p/Inputs/abs_syms.t --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
@@ -36,8 +40,9 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_pos_o
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 
-RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
-RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
 
 DUMP-C: c.li {{a[0-9]+}}, 31
 DUMP-NO-C: addi {{a[0-9]+}}, zero, 31
@@ -48,14 +53,15 @@ DUMP-COMMON: addi {{a[0-9]+}}, zero, -33
 DUMP-COMMON: addi {{a[0-9]+}}, zero, 2047
 DUMP-COMMON: addi {{a[0-9]+}}, zero, -2048
 DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_addi_pos_oob
+DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_addi_neg_oob
+DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_zero
+DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
+RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-C
 MAP-C: # RelaxationBytesDeleted : 28
 MAP-C: # RelaxationBytesMissed : 20
 
