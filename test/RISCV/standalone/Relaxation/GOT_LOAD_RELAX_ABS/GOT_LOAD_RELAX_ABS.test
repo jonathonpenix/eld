@@ -41,6 +41,9 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_o
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos'
+VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_hidden'
+VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_hidden'
+
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
@@ -61,25 +64,27 @@ DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: addi zero, zero, 31
+DUMP-COMMON: addi a0, zero, 42
 DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
 RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-C
-MAP-C: # RelaxationBytesDeleted : 32
-MAP-C: # RelaxationBytesMissed : 22
+MAP-C: # RelaxationBytesDeleted : 36
+MAP-C: # RelaxationBytesMissed : 24
 
 RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
-MAP-NO-C: # RelaxationBytesDeleted : 28
-MAP-NO-C: # RelaxationBytesMissed : 26
+MAP-NO-C: # RelaxationBytesDeleted : 32
+MAP-NO-C: # RelaxationBytesMissed : 28
 
 ## Shared. The psABI only includes "it’s bound at link time to be within the
 ## object" as a condition for the relative case, but it is enforced in eld for
-## the absolute case as well. Check that no relaxation is performed.
+## the absolute case as well. Check that no relaxation is performed for
+## preemptible absolute symbols.
 RUN: %link %linkopts -shared -T %p/Inputs/abs_syms.t \
-RUN: --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
+RUN: --verbose -MapStyle txt -Map %t.dso.map %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 
-DSO-VERBOSE-NOT: RISCV_GOT : Deleting
-DSO-VERBOSE-NOT: RISCV_LI_C :
+DSO-VERBOSE: RISCV_GOT : Deleting 4 bytes for symbol 'sym_hidden'
+DSO-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_hidden'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=DSO-DUMP
 
@@ -103,5 +108,10 @@ DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc zero,
 DSO-DUMP-NEXT: {{l[wd]}} zero,
+DSO-DUMP-NEXT: addi a0, zero, 42
 DSO-DUMP-NOT: c.li
 DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
+
+RUN: %filecheck %s --input-file=%t.dso.map --check-prefix=MAP-DSO
+MAP-DSO: # RelaxationBytesDeleted : 4
+MAP-DSO: # RelaxationBytesMissed : 2

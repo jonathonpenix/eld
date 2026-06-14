@@ -7,3 +7,4 @@ sym_addi_neg = -2048;
 sym_addi_pos_oob = 2048;
 sym_addi_neg_oob = -2049;
 sym_zero = 0;
+HIDDEN(sym_hidden = 42);
