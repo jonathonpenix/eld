@@ -28,13 +28,13 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_neg_oob'
-VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_neg'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_pos_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_addi_neg_oob'
+VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
@@ -45,19 +45,15 @@ DUMP-C: c.li {{a[0-9]+}}, -32
 DUMP-NO-C: addi {{a[0-9]+}}, zero, -32
 DUMP-COMMON: addi {{a[0-9]+}}, zero, 32
 DUMP-COMMON: addi {{a[0-9]+}}, zero, -33
-DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_zero
-DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
-DUMP-COMMON-NEXT: R_RISCV_PCREL_LO12_I sym_zero
-DUMP-NO-C-NOT: c.li
-
-DUMP-COMMON: <bar>:
 DUMP-COMMON: addi {{a[0-9]+}}, zero, 2047
 DUMP-COMMON: addi {{a[0-9]+}}, zero, -2048
 DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_addi_pos_oob
 DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_addi_neg_oob
+DUMP-COMMON: auipc {{a[0-9]+}},
+DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_zero
+DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
 MAP-C: # RelaxationBytesDeleted : 28
@@ -87,7 +83,6 @@ DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP: <bar>:
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
