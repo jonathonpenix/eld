@@ -973,7 +973,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       !llvm::isInt<32>(S - BaseReloc->place(m_Module))) {
     // Still report a missed relaxation as we could have avoided a GOT access
     // even if it doesn't save any bytes.
-    reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
+    if (Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I)
+      reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
     return false;
   }
 
