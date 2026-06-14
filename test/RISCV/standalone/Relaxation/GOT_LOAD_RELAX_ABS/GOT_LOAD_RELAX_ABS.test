@@ -5,19 +5,15 @@ REQUIRES: riscv32 || riscv64
 #     to c.li (6 bytes total saved).
 #   - fits in 12-bit signed but not 6-bit: the auipc is deleted and the lw/ld
 #     is rewritten to addi rd, zero, <value> (4 bytes saved).
-#
-# A weak undefined symbol in a shared object must NOT be GOT-relaxed: the
-# dynamic linker may provide a non-zero value at load time, so the GOT access
-# must be preserved.
 
-RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
+RUN: %clang %clangopts -c %p/Inputs/abs.s -o %t.o
 
 ## Static executable
-RUN: %link %linkopts -T %p/Inputs/syms.t --verbose -MapStyle txt -Map %t.static.map \
+RUN: %link %linkopts -T %p/Inputs/abs_syms.t --verbose -MapStyle txt -Map %t.static.map \
 RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
 
 ## Static executable with --no-relax-c
-RUN: %link %linkopts -T %p/Inputs/syms.t --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
+RUN: %link %linkopts -T %p/Inputs/abs_syms.t --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-NO-C
 
 VERBOSE-COMMON: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'
@@ -33,10 +29,6 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos_oo
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_neg_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_neg_oob'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 4 bytes for symbol 'sym_zero'
-VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_wu'
-VERBOSE-C-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_wu'
-VERBOSE-C-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_wu
-VERBOSE-NO-C-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_wu'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_addi_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_addi_neg'
@@ -57,8 +49,6 @@ DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_zero
 DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON-NEXT: R_RISCV_PCREL_LO12_I sym_zero
-DUMP-C: c.li {{a[0-9]+}}, 0
-DUMP-NO-C: addi {{a[0-9]+}}, zero, 0
 DUMP-NO-C-NOT: c.li
 
 DUMP-COMMON: <bar>:
@@ -70,18 +60,15 @@ DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON-NEXT: R_RISCV_GOT_HI20 sym_addi_neg_oob
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
-MAP-C: # RelaxationBytesDeleted : 34
+MAP-C: # RelaxationBytesDeleted : 28
 MAP-C: # RelaxationBytesMissed : 20
 
 RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
-MAP-NO-C: # RelaxationBytesDeleted : 28
-MAP-NO-C: # RelaxationBytesMissed : 26
+MAP-NO-C: # RelaxationBytesDeleted : 24
+MAP-NO-C: # RelaxationBytesMissed : 24
 
-## Weak undefined and absolute symbols in a shared object — must not be relaxed.
-## isSymbolPreemptible returns true for all globally-visible symbols in a DSO,
-## so GOT relaxation is suppressed regardless of whether the symbol is absolute
-## or weak undefined.
-RUN: %link %linkopts -shared -T %p/Inputs/syms.t \
+## Shared
+RUN: %link %linkopts -shared -T %p/Inputs/abs_syms.t \
 RUN: --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 
 DSO-VERBOSE-NOT: RISCV_GOT : Deleting
@@ -98,9 +85,6 @@ DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP: <foo>:
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP: <bar>:

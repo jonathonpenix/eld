@@ -1,0 +1,51 @@
+REQUIRES: riscv32 || riscv64
+
+RUN: %clang %clangopts -c %p/Inputs/weakundef.s -o %t.o
+
+## Static executable
+RUN: %link %linkopts --verbose -MapStyle txt -Map %t.static.map \
+RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-C
+
+VERBOSE-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
+VERBOSE-C-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_weakundef'
+VERBOSE-C-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_weakundef
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.static.out | %filecheck %s --check-prefix=DUMP-C
+DUMP-C: c.li {{a[0-9]+}}, 0
+
+RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
+MAP-C: # RelaxationBytesDeleted : 6
+MAP-C-NOT: # RelaxationBytesMissed
+
+## Static executable with --no-relax-c
+RUN: %link %linkopts --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
+RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-NO-C
+
+VERBOSE-NO-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
+VERBOSE-NO-C-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_weakundef'
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefix=DUMP-NO-C
+
+DUMP-NO-C: addi {{a[0-9]+}}, zero, 0
+DUMP-NO-C-NOT: c.li
+
+RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
+MAP-NO-C: # RelaxationBytesDeleted : 4
+MAP-NO-C: # RelaxationBytesMissed : 2
+
+## Shared, the symbol is preemptible so no relaxation should happen.
+RUN: %link %linkopts -shared --verbose -MapStyle txt -Map %t.shared.map %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=SHARED-VERBOSE
+
+SHARED-VERBOSE-NOT: RISCV_GOT
+SHARED-VERBOSE-NOT: RISCV_LI_C
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=SHARED-DUMP
+
+SHARED-DUMP: auipc {{a[0-9]+}},
+SHARED-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+SHARED-DUMP-NOT: c.li
+SHARED-DUMP-NOT: addi {{a[0-9]+}}, zero,
+
+RUN: %filecheck %s --input-file=%t.shared.map --check-prefix=MAP-SHARED
+MAP-SHARED-NOT: # RelaxationBytesDeleted
+MAP-SHARED-NOT: # RelaxationBytesMissed
