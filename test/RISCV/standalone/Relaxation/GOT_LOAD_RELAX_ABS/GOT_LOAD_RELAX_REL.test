@@ -1,0 +1,30 @@
+REQUIRES: riscv32 || riscv64
+
+# Relax GOT loads of relative symbols. The symbol is non-preemptible in a
+# static executable, so the GOT indirection can be replaced with a direct
+# PC-relative address materialisation:
+#
+#   auipc tX, %got_pcrel_hi(sym)   ->   auipc tX, %pcrel_hi(sym)
+#   lw/ld tY, %pcrel_lo(label)(tX) ->   addi  tY, tX, %pcrel_lo(label)
+
+RUN: %clang %clangopts -c %p/Inputs/rel.s -o %t.o
+
+## Static executable
+RUN: %link %linkopts --verbose -MapStyle txt -Map %t.map \
+RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
+
+VERBOSE-NOT: RISCV_GOT : Cannot relax
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=DUMP
+
+DUMP: auipc a0,
+DUMP: addi a0, {{a[0-9]+}},
+DUMP: auipc a1,
+DUMP: addi a1, {{a[0-9]+}},
+DUMP: auipc a2,
+DUMP: {{l[wd]}} a2,
+
+## No bytes are deleted (auipc stays, lw/ld->addi is size-neutral), so
+## RelaxationBytesDeleted does not appear in the map.
+RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
+MAP-NOT: RelaxationBytesDeleted
