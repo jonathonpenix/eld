@@ -33,19 +33,25 @@ RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
 MAP-NO-C: # RelaxationBytesDeleted : 4
 MAP-NO-C: # RelaxationBytesMissed : 2
 
+## Static pie executable, currently eld treats weak undef symbols as preemptible
+## under static pie, so no relaxation can happen here.
+RUN: %link %linkopts -static -pie --verbose -MapStyle txt -Map %t.static-pie.map %t.o -o %t.static-pie.out 2>&1 | %filecheck %s --check-prefix=NO-RELAX-VERBOSE
+
 ## Shared, the symbol is preemptible so no relaxation should happen.
-RUN: %link %linkopts -shared --verbose -MapStyle txt -Map %t.shared.map %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=SHARED-VERBOSE
+RUN: %link %linkopts -shared --verbose -MapStyle txt -Map %t.shared.map %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=NO-RELAX-VERBOSE
 
-SHARED-VERBOSE-NOT: RISCV_GOT
-SHARED-VERBOSE-NOT: RISCV_LI_C
+NO-RELAX-VERBOSE-NOT: RISCV_GOT
+NO-RELAX-VERBOSE-NOT: RISCV_LI_C
 
-RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=SHARED-DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefix=NO-RELAX-DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=NO-RELAX-DUMP
 
-SHARED-DUMP: auipc {{a[0-9]+}},
-SHARED-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-SHARED-DUMP-NOT: c.li
-SHARED-DUMP-NOT: addi {{a[0-9]+}}, zero,
+NO-RELAX-DUMP: auipc {{a[0-9]+}},
+NO-RELAX-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+NO-RELAX-DUMP-NOT: c.li
+NO-RELAX-DUMP-NOT: addi {{a[0-9]+}}, zero,
 
-RUN: %filecheck %s --input-file=%t.shared.map --check-prefix=MAP-SHARED
-MAP-SHARED-NOT: # RelaxationBytesDeleted
-MAP-SHARED-NOT: # RelaxationBytesMissed
+RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-NO-RELAX
+RUN: %filecheck %s --input-file=%t.shared.map --check-prefix=MAP-NO-RELAX
+MAP-NO-RELAX-NOT: # RelaxationBytesDeleted
+MAP-NO-RELAX-NOT: # RelaxationBytesMissed
