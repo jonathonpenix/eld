@@ -2,8 +2,8 @@
 .option pic
 
 .text
-.global _start
-_start:
+.global foo
+foo:
     lga a0, sym_cli_pos
     lga a1, sym_cli_neg
     lga a2, sym_cli_pos_oob

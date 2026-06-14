@@ -72,8 +72,7 @@ DSO-VERBOSE-NOT: RISCV_LI_C :
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=DSO-DUMP
 
-DSO-DUMP: <_start>:
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
+DSO-DUMP: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
