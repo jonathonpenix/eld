@@ -10,12 +10,17 @@ REQUIRES: riscv32 || riscv64
 RUN: %clang %clangopts -c %p/Inputs/rel.s -o %t.o
 
 ## Static executable
-RUN: %link %linkopts --verbose -MapStyle txt -Map %t.map \
-RUN:   %t.o -o %t.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
+RUN: %link %linkopts -static --verbose -MapStyle txt -Map %t.static.map \
+RUN:   %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
+
+## Static, pie executable
+RUN: %link %linkopts -static -pie --verbose -MapStyle txt -Map %t.static-pie.map \
+RUN:   %t.o -o %t.static-pie.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
 
 VERBOSE-NOT: RISCV_GOT : Cannot relax
 
-RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefix=DUMP
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefix=DUMP
 
 DUMP: auipc a0,
 DUMP: addi a0, {{a[0-9]+}},
@@ -26,5 +31,27 @@ DUMP: {{l[wd]}} a2,
 
 ## No bytes are deleted (auipc stays, lw/ld->addi is size-neutral), so
 ## RelaxationBytesDeleted does not appear in the map.
-RUN: %filecheck %s --input-file=%t.map --check-prefix=MAP
+RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP
+RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP
 MAP-NOT: RelaxationBytesDeleted
+
+## Shared
+RUN: %link %linkopts -shared --verbose -MapStyle txt -Map %t.shared.map \
+RUN:   %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=SHARED-VERBOSE
+
+SHARED-VERBOSE-NOT: RISCV_GOT : Cannot relax
+## FIXME: can have nots here
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=SHARED-DUMP
+
+SHARED-DUMP: auipc a0,
+SHARED-DUMP: {{l[wd]}} a0,
+SHARED-DUMP: auipc a1,
+SHARED-DUMP: addi a1, {{a[0-9]+}},
+SHARED-DUMP: auipc a2,
+SHARED-DUMP: {{l[wd]}} a2,
+
+## No bytes are deleted (auipc stays, lw/ld->addi is size-neutral), so
+## RelaxationBytesDeleted does not appear in the map.
+RUN: %filecheck %s --input-file=%t.shared.map --check-prefix=SHARED-MAP
+SHARED-MAP-NOT: RelaxationBytesDeleted

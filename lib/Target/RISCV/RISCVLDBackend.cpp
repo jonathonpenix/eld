@@ -901,10 +901,9 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
-    // So long as eld uses zero as an indicator of an unknown symbol value,
-    // we can't perform this relaxation if we see a symbol with value zero.
-    // Undefined weak symbols are an exception--they are handled as an
-    // absolute symbol at address 0, but we can safely disambiguate this case.
+    // Comments elsewhere mention eld uses zero as an indicator of an unknown
+    // symbol value, so conservatively follow suit and skip this relaxation for
+    // symbols of value zero.
     bool SymbolValueMayBeUnknown = S == 0 && !SymInfo->isWeakUndef();
     bool CanRelaxToAddi =
         GOTRelaxEnabled && !SymbolValueMayBeUnknown && llvm::isInt<12>(S);

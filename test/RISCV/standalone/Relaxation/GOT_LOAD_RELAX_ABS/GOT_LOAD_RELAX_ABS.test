@@ -8,8 +8,8 @@ REQUIRES: riscv32 || riscv64
 
 RUN: %clang %clangopts -c %p/Inputs/abs.s -o %t.o
 
-## Static, no-pie executable
-RUN: %link %linkopts -T %p/Inputs/abs_syms.t --verbose -MapStyle txt -Map %t.static.map \
+## Static executable
+RUN: %link %linkopts -static -T %p/Inputs/abs_syms.t --verbose -MapStyle txt -Map %t.static.map \
 RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
 
 ## Static, pie executable
@@ -17,7 +17,7 @@ RUN: %link %linkopts -T %p/Inputs/abs_syms.t -static -pie --verbose -MapStyle tx
 RUN: %t.o -o %t.static-pie.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
 
 ## Static executable with --no-relax-c
-RUN: %link %linkopts -T %p/Inputs/abs_syms.t --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
+RUN: %link %linkopts -T %p/Inputs/abs_syms.t -static --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-NO-C
 
 VERBOSE-COMMON: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'

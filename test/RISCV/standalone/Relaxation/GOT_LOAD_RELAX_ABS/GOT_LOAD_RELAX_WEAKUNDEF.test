@@ -3,7 +3,7 @@ REQUIRES: riscv32 || riscv64
 RUN: %clang %clangopts -c %p/Inputs/weakundef.s -o %t.o
 
 ## Static executable
-RUN: %link %linkopts --verbose -MapStyle txt -Map %t.static.map \
+RUN: %link %linkopts -static --verbose -MapStyle txt -Map %t.static.map \
 RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-C
 
 VERBOSE-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
@@ -18,7 +18,7 @@ MAP-C: # RelaxationBytesDeleted : 6
 MAP-C-NOT: # RelaxationBytesMissed
 
 ## Static executable with --no-relax-c
-RUN: %link %linkopts --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
+RUN: %link %linkopts -static --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-NO-C
 
 VERBOSE-NO-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
