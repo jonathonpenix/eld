@@ -1,0 +1,22 @@
+REQUIRES: riscv32 || riscv64
+
+## FIXME: I think we should maybe check verbose output here too I guess
+
+## Check --no-relax and --no-relax-got are respected.
+RUN: %clang %clangopts -c %p/Inputs/common.s -o %t.common.o
+RUN: %link %linkopts --defsym abs_var=5 --no-relax %t.common.o -o %t.out
+RUN: %link %linkopts --defsym abs_var=5 --no-relax-got %t.common.o -o %t2.out
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.out | %filecheck %s --check-prefix=NO-RELAX
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t2.out | %filecheck %s --check-prefix=NO-RELAX
+
+## Check relaxation isn't performed if there's a non-zero addend on the got_hi.
+RUN: %clang %clangopts -c %p/Inputs/addend.s -o %t.addend.o
+RUN: %link %linkopts --defsym abs_var=5 %t.addend.o -o %t.addend.out
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.addend.out | %filecheck %s --check-prefix=NO-RELAX
+
+NO-RELAX: auipc {{a[0-9]+}},
+NO-RELAX: {{l[wd]}} {{a[0-9]+}},
+NO-RELAX: auipc {{a[0-9]+}},
+NO-RELAX: {{l[wd]}} {{a[0-9]+}},
+NO-RELAX-NOT: c.li
+NO-RELAX-NOT: addi {{a[0-9]+}},

@@ -912,6 +912,8 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       return true;
     }
 
+    assert(Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I &&
+           "Unexpected relocation type!");
     uint64_t Instr = Reloc.target();
     unsigned rd = (Instr >> 7) & 0x1Fu;
     bool CanRelaxToCLi = GOTRelaxEnabled &&
