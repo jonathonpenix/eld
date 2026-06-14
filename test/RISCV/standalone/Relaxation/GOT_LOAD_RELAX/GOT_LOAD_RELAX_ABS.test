@@ -44,7 +44,6 @@ VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_cli_pos'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Deleting 4 bytes for symbol 'sym_hidden'
 VERBOSE-COMMON-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_hidden'
 
-
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
@@ -64,7 +63,7 @@ DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: auipc {{a[0-9]+}},
 DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
 DUMP-COMMON: addi zero, zero, 31
-DUMP-COMMON: addi a0, zero, 42
+DUMP-COMMON: addi a1, zero, 42
 DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
@@ -108,7 +107,7 @@ DSO-DUMP-NEXT: auipc {{a[0-9]+}},
 DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
 DSO-DUMP-NEXT: auipc zero,
 DSO-DUMP-NEXT: {{l[wd]}} zero,
-DSO-DUMP-NEXT: addi a0, zero, 42
+DSO-DUMP-NEXT: addi a1, zero, 42
 DSO-DUMP-NOT: c.li
 DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
 
