@@ -15,3 +15,10 @@ _start:
 .global foo
 foo:
     lga a0, sym_wu
+
+.global bar
+bar:
+    lga a0, sym_addi_pos_hi
+    lga a1, sym_addi_neg_lo
+    lga a2, sym_addi_pos_oob
+    lga a3, sym_addi_neg_oob
