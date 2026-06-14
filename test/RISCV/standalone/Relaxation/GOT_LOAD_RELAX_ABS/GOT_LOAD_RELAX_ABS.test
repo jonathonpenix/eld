@@ -69,7 +69,9 @@ RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
 MAP-NO-C: # RelaxationBytesDeleted : 24
 MAP-NO-C: # RelaxationBytesMissed : 24
 
-## Shared
+## Shared. The psABI only includes "it’s bound at link time to be within the
+## object" as a condition for the relative case, but it is enforced in eld for
+## the absolute case as well. Check that no relaxation is performed.
 RUN: %link %linkopts -shared -T %p/Inputs/abs_syms.t \
 RUN: --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 

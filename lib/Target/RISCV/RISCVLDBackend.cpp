@@ -884,7 +884,15 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     return false;
 
   ResolveInfo *SymInfo = BaseReloc->symInfo();
-  if (isSymbolPreemptible(*SymInfo) || SymInfo->isIFunc())
+  // The psABI only includes "it’s bound at link time to be within the object"
+  // as a condition for the relative case. But, absolute symbols are seemingly
+  // also preemptible, so ignoring this check in the absolute case could mean a
+  // change in behavior if the relaxation is performed. Treat this as a general
+  // requirement for the relaxation.
+  if (isSymbolPreemptible(*SymInfo))
+    return false;
+
+  if (SymInfo->isIFunc())
     return false;
 
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
