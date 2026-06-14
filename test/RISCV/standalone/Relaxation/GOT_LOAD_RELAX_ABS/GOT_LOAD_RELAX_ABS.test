@@ -13,9 +13,7 @@ REQUIRES: riscv32 || riscv64
 RUN: %clang %clangopts -c %p/Inputs/1.s -o %t.o
 
 ## Absolute symbol relaxation (static executable)
-RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
-RUN: --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
-RUN: --verbose -MapStyle txt -Map %t.map \
+RUN: %link %linkopts -T %p/Inputs/syms.t --verbose -MapStyle txt -Map %t.map \
 RUN: %t.o -o %t.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-C
 
 VERBOSE-COMMON: RISCV_GOT : Deleting 4 bytes for symbol 'sym_cli_pos'
@@ -74,9 +72,7 @@ MAP-C: # RelaxationBytesMissed : 20
 ## isSymbolPreemptible returns true for all globally-visible symbols in a DSO,
 ## so GOT relaxation is suppressed regardless of whether the symbol is absolute
 ## or weak undefined.
-RUN: %link %linkopts -shared \
-RUN: --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
-RUN: --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
+RUN: %link %linkopts -shared -T %p/Inputs/syms.t \
 RUN: --verbose %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=DSO-VERBOSE
 
 DSO-VERBOSE-NOT: RISCV_GOT : Deleting
@@ -112,9 +108,7 @@ DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
 
 ## Absolute symbol relaxation with --no-relax-c (static executable)
 ## All symbols that would use c.li fall back to addi instead.
-RUN: %link %linkopts --defsym sym_cli_pos=31 --defsym sym_cli_neg=-32 --defsym sym_cli_pos_oob=32 --defsym sym_cli_neg_oob=-33 --defsym sym_zero=0 \
-RUN: --defsym sym_addi_pos=2047 --defsym sym_addi_neg=-2048 --defsym sym_addi_pos_oob=2048 --defsym sym_addi_neg_oob=-2049 \
-RUN: --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
+RUN: %link %linkopts -T %p/Inputs/syms.t --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefixes=VERBOSE-COMMON,VERBOSE-NO-C
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
