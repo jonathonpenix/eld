@@ -152,6 +152,10 @@ DUMP-NONSEQ-ADDI: addi a3, zero, 10
 DUMP-NONSEQ-ADDI: addi a1, zero, 5
 DUMP-NONSEQ-ADDI: addi a2, zero, 10
 
+DUMP-NONSEQ-COMMON-LABEL: <bar>:
+DUMP-NONSEQ-COMMON: lw a0,
+DUMP-NONSEQ-COMMON: auipc a0,
+
 RUN: %filecheck %s --input-file=%t.nonseq-cli.map --check-prefix=MAP-NONSEQ-CLI
 
 MAP-NONSEQ-CLI: # RelaxationBytesDeleted : 14

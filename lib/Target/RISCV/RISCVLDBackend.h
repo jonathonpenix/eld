@@ -287,6 +287,10 @@ private:
 
   bool allGOTLOsRelaxable(const Relocation &HIReloc, const ELFSection *S) const;
 
+  // Returns whether all PCREL_LO12 relocations referencing the provided
+  // GOT_HI20 relocation occur at a greater offset than the GOT_HI20.
+  bool allGOTLOsAfterHI(const Relocation &HIReloc) const;
+
 private:
   ELFSection *createGOTSection(InputFile &InputFile);
   ELFSection *createGOTPLTSection(InputFile &InputFile);

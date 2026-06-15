@@ -895,6 +895,14 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   if (SymInfo->isIFunc())
     return false;
 
+  // This isn't required by the ABI but prevents a mislink when the LO
+  // relocations are processed before the HI. Prevent this by requiring that all
+  // LO relocations are at a greater offset than the HI relocation. Most
+  // realistic usecases should meet this hopefully.
+  // FIXME: link eld ticket once it's been created
+  if (!allGOTLOsAfterHI(*BaseReloc))
+    return false;
+
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
   uint64_t Offset = Reloc.targetRef()->offset();
   StringRef SymName = SymInfo->name();
@@ -2009,6 +2017,17 @@ bool RISCVLDBackend::allGOTLOsRelaxable(const Relocation &HIReloc,
             relocWasGOTLoadRelaxed(R)) &&
            S->getLink()->findRelocation(R->targetRef()->offset(),
                                         llvm::ELF::R_RISCV_RELAX);
+  });
+}
+
+bool RISCVLDBackend::allGOTLOsAfterHI(const Relocation &HIReloc) const {
+  const llvm::SmallVectorImpl<const Relocation *> *LORelocs =
+      getBaseRelocRefs(HIReloc);
+  if (!LORelocs || LORelocs->empty())
+    return false;
+
+  return llvm::all_of(*LORelocs, [&](const Relocation *R) {
+    return HIReloc.targetRef()->offset() <= R->targetRef()->offset();
   });
 }
 

@@ -24,3 +24,20 @@ foo:
     lw a3, %pcrel_lo(.La)(a0)
     lga a1, var2
     lw a2, %pcrel_lo(.La)(a0)
+
+## Check that the relaxation is able to cope with the HI/LO relocations
+## not necessarily being processed in that order. In principle, this
+## should be relaxable but this currently mislinks. Having the HI/LO parts
+## split in this way should be fairly rare, so for now don't relax if a LO
+## will be processed before the HI.
+.global bar
+bar:
+    j .Lgotpcrel_hi1
+
+.Lpcrel_lo1:
+    lw a0, %pcrel_lo(.Lgotpcrel_hi1)(a0)
+    ret
+
+.Lgotpcrel_hi1:
+    auipc a0, %got_pcrel_hi(var2)
+    j .Lpcrel_lo1
