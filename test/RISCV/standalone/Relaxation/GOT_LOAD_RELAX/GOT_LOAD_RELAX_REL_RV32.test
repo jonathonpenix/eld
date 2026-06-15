@@ -1,7 +1,12 @@
 REQUIRES: riscv32
+#----------GOT_LOAD_RELAX_REL_RV32.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior specific to handling relative
+# symbols for rv32.
+#END_COMMENT
+#START_TEST
 
 ## Test that the relaxation is performed for symbols == 0 for rv32
-
 RUN: %clang %clangopts -c %p/Inputs/rel_rv32.s -o %t.o
 RUN: %link %linkopts -static -T %p/Inputs/rel_rv32.t %t.o -o %t.static.out
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefix=DUMP

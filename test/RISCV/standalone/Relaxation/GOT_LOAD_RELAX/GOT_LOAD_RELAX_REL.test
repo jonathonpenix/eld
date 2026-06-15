@@ -1,11 +1,10 @@
 REQUIRES: riscv32 || riscv64
-
-# Relax GOT loads of relative symbols. The symbol is non-preemptible in a
-# static executable, so the GOT indirection can be replaced with a direct
-# PC-relative address materialisation:
-#
-#   auipc tX, %got_pcrel_hi(sym)   ->   auipc tX, %pcrel_hi(sym)
-#   lw/ld tY, %pcrel_lo(label)(tX) ->   addi  tY, tX, %pcrel_lo(label)
+#----------GOT_LOAD_RELAX_REL.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior specific to handling relative
+# symbols.
+#END_COMMENT
+#START_TEST
 
 RUN: %clang %clangopts -c %p/Inputs/rel.s -o %t.o
 

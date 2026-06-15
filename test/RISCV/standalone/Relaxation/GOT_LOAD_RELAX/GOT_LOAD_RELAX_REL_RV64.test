@@ -1,8 +1,13 @@
 REQUIRES: riscv64
+#----------GOT_LOAD_RELAX_REL_RV64.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior specific to handling relative symbols
+# for rv64 targets.
+#END_COMMENT
+#START_TEST
 
 ## Test that the relaxation is not performed for symbols == 0 for rv64 and
 ## bounds are correctly checked
-
 RUN: %clang %clangopts -c %p/Inputs/rel_rv64.s -o %t.o
 RUN: %link %linkopts -static --verbose -T %p/Inputs/rel_rv64.t %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
 

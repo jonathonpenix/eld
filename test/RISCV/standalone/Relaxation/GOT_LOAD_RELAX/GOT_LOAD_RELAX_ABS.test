@@ -1,10 +1,10 @@
 REQUIRES: riscv32 || riscv64
-
-# Relax GOT loads of absolute symbols. Depending on the symbol value:
-#   - fits in 6-bit signed: the auipc is deleted and the lw/ld is compressed
-#     to c.li (6 bytes total saved).
-#   - fits in 12-bit signed but not 6-bit: the auipc is deleted and the lw/ld
-#     is rewritten to addi rd, zero, <value> (4 bytes saved).
+#----------GOT_LOAD_RELAX_ABS.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior specific to handling absolute
+# symbols.
+#END_COMMENT
+#START_TEST
 
 RUN: %clang %clangopts -c %p/Inputs/abs.s -o %t.o
 

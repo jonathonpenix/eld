@@ -1,4 +1,10 @@
 REQUIRES: riscv32 || riscv64
+#----------GOT_LOAD_RELAX_WEAKUNDEF.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior specific to handling weakundef
+# symbols.
+#END_COMMENT
+#START_TEST
 
 RUN: %clang %clangopts -c %p/Inputs/weakundef.s -o %t.o
 

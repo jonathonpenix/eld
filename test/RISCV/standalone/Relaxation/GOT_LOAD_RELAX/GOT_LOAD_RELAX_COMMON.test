@@ -1,4 +1,10 @@
 REQUIRES: riscv32 || riscv64
+#----------GOT_LOAD_RELAX_COMMON.test----------------- Executable------------------#
+#BEGIN_COMMENT
+# This tests checks GOT load relaxation behavior common to both relative and
+# absolute symbols around when the relaxation should not occur.
+#END_COMMENT
+#START_TEST
 
 ## Check --no-relax and --no-relax-got are respected.
 RUN: %clang %clangopts -c %p/Inputs/common.s -o %t.common.o
