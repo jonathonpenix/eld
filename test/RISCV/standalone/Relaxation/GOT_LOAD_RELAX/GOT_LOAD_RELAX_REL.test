@@ -49,3 +49,7 @@ DUMP-NONSEQ: addi a3, a0,
 DUMP-NONSEQ: auipc a1,
 DUMP-NONSEQ: addi a1, a1,
 DUMP-NONSEQ: addi a2, a0,
+
+DUMP-NONSEQ-COMMON-LABEL: <bar>:
+DUMP-NONSEQ-COMMON: lw a0,
+DUMP-NONSEQ-COMMON: auipc a0,
