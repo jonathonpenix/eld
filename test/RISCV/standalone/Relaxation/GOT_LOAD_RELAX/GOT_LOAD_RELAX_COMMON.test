@@ -1,7 +1,5 @@
 REQUIRES: riscv32 || riscv64
 
-## FIXME: I think we should maybe check verbose output here too I guess
-
 ## Check --no-relax and --no-relax-got are respected.
 RUN: %clang %clangopts -c %p/Inputs/common.s -o %t.common.o
 RUN: %link %linkopts --defsym abs_var=5 --no-relax %t.common.o -o %t.out

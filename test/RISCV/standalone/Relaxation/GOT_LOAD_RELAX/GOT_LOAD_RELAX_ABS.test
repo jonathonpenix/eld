@@ -114,3 +114,48 @@ DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
 RUN: %filecheck %s --input-file=%t.dso.map --check-prefix=MAP-DSO
 MAP-DSO: # RelaxationBytesDeleted : 4
 MAP-DSO: # RelaxationBytesMissed : 2
+
+## Check nonsequential relaxations look as expected when relaxing to c.li
+RUN: %clang %clangopts -c %p/Inputs/nonsequential.S -o %t.nonseq.o
+RUN: %link %linkopts -static --defsym var=10 --defsym var2=5 --verbose -MapStyle txt -Map %t.nonseq-cli.map \
+RUN: %t.nonseq.o -o %t.nonseq-cli.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-NONSEQ-CLI
+
+VERBOSE-NONSEQ-CLI: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'var'
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_GOT_LOAD : Deleting 2 bytes for symbol 'var'
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol var
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'var2'
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_GOT_LOAD : Deleting 2 bytes for symbol 'var2'
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol var2
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_GOT_LOAD : Deleting 2 bytes for symbol 'var'
+VERBOSE-NONSEQ-CLI-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol var
+
+## Check nonsequential relaxations look as expected when relaxing to addi
+RUN: %link %linkopts -static --defsym var=10 --defsym var2=5 --no-relax-c --verbose -MapStyle txt -Map %t.nonseq-addi.map \
+RUN: %t.nonseq.o -o %t.nonseq-addi.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-NONSEQ-ADDI
+
+VERBOSE-NONSEQ-ADDI: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'var'
+VERBOSE-NONSEQ-ADDI-NEXT: RISCV_GOT_LOAD : Cannot relax 2 bytes for symbol 'var'
+VERBOSE-NONSEQ-ADDI-NEXT: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'var2'
+VERBOSE-NONSEQ-ADDI-NEXT: RISCV_GOT_LOAD : Cannot relax 2 bytes for symbol 'var2'
+VERBOSE-NONSEQ-ADDI-NEXT: RISCV_GOT_LOAD : Cannot relax 2 bytes for symbol 'var'
+
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.nonseq-cli.out | %filecheck %s --check-prefixes=DUMP-NONSEQ-COMMON,DUMP-NONSEQ-CLI
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.nonseq-addi.out | %filecheck %s --check-prefix=DUMP-NONSEQ-COMMON,DUMP-NONSEQ-ADDI
+
+DUMP-NONSEQ-COMMON-LABEL: <foo>:
+DUMP-NONSEQ-COMMON: nop
+DUMP-NONSEQ-COMMON: nop
+DUMP-NONSEQ-CLI: c.li a3, 10
+DUMP-NONSEQ-CLI: c.li a1, 5
+DUMP-NONSEQ-CLI: c.li a2, 10
+DUMP-NONSEQ-ADDI: addi a3, zero, 10
+DUMP-NONSEQ-ADDI: addi a1, zero, 5
+DUMP-NONSEQ-ADDI: addi a2, zero, 10
+
+RUN: %filecheck %s --input-file=%t.nonseq-cli.map --check-prefix=MAP-NONSEQ-CLI
+
+MAP-NONSEQ-CLI: # RelaxationBytesDeleted : 14
+
+RUN: %filecheck %s --input-file=%t.nonseq-addi.map --check-prefix=MAP-NONSEQ-ADDI
+MAP-NONSEQ-ADDI: # RelaxationBytesDeleted : 8
+MAP-NONSEQ-ADDI: # RelaxationBytesMissed : 6
