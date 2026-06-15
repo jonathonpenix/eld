@@ -35,3 +35,17 @@ SHARED-DUMP-NEXT: auipc a1,
 SHARED-DUMP-NEXT: addi a1, a1,
 SHARED-DUMP-NEXT: auipc a2,
 SHARED-DUMP-NEXT: {{l[wd]}} a2,
+
+## Check nonsequential relaxations look as expected.
+RUN: %clang %clangopts -DUSE_REL=1 -c %p/Inputs/nonsequential.S -o %t.nonseq.o
+RUN: %link %linkopts -static %t.nonseq.o -o %t.nonseq.out
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.nonseq.out | %filecheck %s --check-prefixes=DUMP-NONSEQ
+
+DUMP-NONSEQ-LABEL: <foo>:
+DUMP-NONSEQ: auipc a0,
+DUMP-NONSEQ: nop
+DUMP-NONSEQ: nop
+DUMP-NONSEQ: addi a3, a0,
+DUMP-NONSEQ: auipc a1,
+DUMP-NONSEQ: addi a1, a1,
+DUMP-NONSEQ: addi a2, a0,
