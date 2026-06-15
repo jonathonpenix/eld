@@ -19,19 +19,19 @@ RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefix=DUMP
 
 DUMP: auipc a0,
-DUMP: addi a0, {{a[0-9]+}},
+DUMP-NEXT: addi a0, a0,
 DUMP: auipc a1,
-DUMP: addi a1, {{a[0-9]+}},
+DUMP-NEXT: addi a1, a1,
 DUMP: auipc a2,
-DUMP: {{l[wd]}} a2,
+DUMP-NEXT: {{l[wd]}} a2,
 
 ## Shared
 RUN: %link %linkopts -shared %t.o -o %t.so
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=SHARED-DUMP
 
 SHARED-DUMP: auipc a0,
-SHARED-DUMP: {{l[wd]}} a0,
-SHARED-DUMP: auipc a1,
-SHARED-DUMP: addi a1, {{a[0-9]+}},
-SHARED-DUMP: auipc a2,
-SHARED-DUMP: {{l[wd]}} a2,
+SHARED-DUMP-NEXT: {{l[wd]}} a0,
+SHARED-DUMP-NEXT: auipc a1,
+SHARED-DUMP-NEXT: addi a1, a1,
+SHARED-DUMP-NEXT: auipc a2,
+SHARED-DUMP-NEXT: {{l[wd]}} a2,

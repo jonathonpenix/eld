@@ -14,9 +14,9 @@ RUN: %clang %clangopts -c %p/Inputs/addend.s -o %t.addend.o
 RUN: %link %linkopts --defsym abs_var=5 %t.addend.o -o %t.addend.out
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.addend.out | %filecheck %s --check-prefix=NO-RELAX
 
-NO-RELAX: auipc {{a[0-9]+}},
-NO-RELAX: {{l[wd]}} {{a[0-9]+}},
-NO-RELAX: auipc {{a[0-9]+}},
-NO-RELAX: {{l[wd]}} {{a[0-9]+}},
+NO-RELAX: auipc a1,
+NO-RELAX-NEXT: {{l[wd]}} a1,
+NO-RELAX: auipc a2,
+NO-RELAX-NEXT: {{l[wd]}} a2,
 NO-RELAX-NOT: c.li
 NO-RELAX-NOT: addi {{a[0-9]+}},

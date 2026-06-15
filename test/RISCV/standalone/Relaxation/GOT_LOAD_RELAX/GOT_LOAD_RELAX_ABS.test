@@ -48,20 +48,20 @@ RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-C
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.norelaxc.out | %filecheck %s --check-prefixes=DUMP-COMMON,DUMP-NO-C
 
-DUMP-C: c.li {{a[0-9]+}}, 31
-DUMP-NO-C: addi {{a[0-9]+}}, zero, 31
-DUMP-C: c.li {{a[0-9]+}}, -32
-DUMP-NO-C: addi {{a[0-9]+}}, zero, -32
-DUMP-COMMON: addi {{a[0-9]+}}, zero, 32
-DUMP-COMMON: addi {{a[0-9]+}}, zero, -33
-DUMP-COMMON: addi {{a[0-9]+}}, zero, 2047
-DUMP-COMMON: addi {{a[0-9]+}}, zero, -2048
-DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
-DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
-DUMP-COMMON: auipc {{a[0-9]+}},
-DUMP-COMMON: {{l[wd]}} {{a[0-9]+}},
+DUMP-C: c.li a0, 31
+DUMP-NO-C: addi a0, zero, 31
+DUMP-C: c.li a1, -32
+DUMP-NO-C: addi a1, zero, -32
+DUMP-COMMON: addi a2, zero, 32
+DUMP-COMMON: addi a3, zero, -33
+DUMP-COMMON: addi a0, zero, 2047
+DUMP-COMMON: addi a1, zero, -2048
+DUMP-COMMON: auipc a2,
+DUMP-COMMON-NEXT: {{l[wd]}} a2,
+DUMP-COMMON: auipc a3,
+DUMP-COMMON-NEXT: {{l[wd]}} a3,
+DUMP-COMMON: auipc a0,
+DUMP-COMMON-NEXT: {{l[wd]}} a0,
 DUMP-COMMON: addi zero, zero, 31
 DUMP-COMMON: addi a1, zero, 42
 DUMP-NO-C-NOT: c.li
@@ -87,24 +87,24 @@ DSO-VERBOSE-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_hidden'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-prefix=DSO-DUMP
 
-DSO-DUMP: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
-DSO-DUMP-NEXT: auipc {{a[0-9]+}},
-DSO-DUMP-NEXT: {{l[wd]}} {{a[0-9]+}},
+DSO-DUMP: auipc a0,
+DSO-DUMP-NEXT: {{l[wd]}} a0,
+DSO-DUMP-NEXT: auipc a1,
+DSO-DUMP-NEXT: {{l[wd]}} a1,
+DSO-DUMP-NEXT: auipc a2,
+DSO-DUMP-NEXT: {{l[wd]}} a2,
+DSO-DUMP-NEXT: auipc a3,
+DSO-DUMP-NEXT: {{l[wd]}} a3,
+DSO-DUMP-NEXT: auipc a0,
+DSO-DUMP-NEXT: {{l[wd]}} a0,
+DSO-DUMP-NEXT: auipc a1,
+DSO-DUMP-NEXT: {{l[wd]}} a1,
+DSO-DUMP-NEXT: auipc a2,
+DSO-DUMP-NEXT: {{l[wd]}} a2,
+DSO-DUMP-NEXT: auipc a3,
+DSO-DUMP-NEXT: {{l[wd]}} a3,
+DSO-DUMP-NEXT: auipc a0,
+DSO-DUMP-NEXT: {{l[wd]}} a0,
 DSO-DUMP-NEXT: auipc zero,
 DSO-DUMP-NEXT: {{l[wd]}} zero,
 DSO-DUMP-NEXT: addi a1, zero, 42
