@@ -20,3 +20,27 @@ NO-RELAX: auipc a2,
 NO-RELAX-NEXT: {{l[wd]}} a2,
 NO-RELAX-NOT: c.li
 NO-RELAX-NOT: addi {{a[0-9]+}},
+
+## Check relaxation isn't performed if not all HI/LOs have R_RISCV_RELAX or
+## if a LO is missing.
+RUN: %clang %clangopts -c %p/Inputs/partial_relax.s -o %t.partial.o
+RUN: %link %linkopts --defsym abs_var=5 %t.partial.o -o %t.partial.out
+RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.partial.out | %filecheck %s --check-prefix=PARTIAL-NO-RELAX
+
+PARTIAL-NO-RELAX: auipc a1,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a1,
+PARTIAL-NO-RELAX: auipc a2,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a2,
+PARTIAL-NO-RELAX: auipc a1,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a1,
+PARTIAL-NO-RELAX: auipc a2,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a2,
+PARTIAL-NO-RELAX: auipc a1,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a2,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a3,
+PARTIAL-NO-RELAX: auipc a1,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a2,
+PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a3,
+PARTIAL-NO-RELAX: auipc a1,
+PARTIAL-NO-RELAX-NOT: c.li
+PARTIAL-NO-RELAX-NOT: addi {{a[0-9]+}},
