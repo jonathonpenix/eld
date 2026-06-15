@@ -6,8 +6,8 @@ REQUIRES: riscv64
 RUN: %clang %clangopts -c %p/Inputs/rel_rv64.s -o %t.o
 RUN: %link %linkopts -static --verbose -T %p/Inputs/rel_rv64.t %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE
 
-VERBOSE: RISCV_GOT : Cannot relax 0 bytes for symbol 'var'
-VERBOSE-NEXT: RISCV_GOT : Cannot relax 0 bytes for symbol 'var3'
+VERBOSE: RISCV_GOT_LOAD : Cannot relax 0 bytes for symbol 'var'
+VERBOSE-NEXT: RISCV_GOT_LOAD : Cannot relax 0 bytes for symbol 'var3'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static.out | %filecheck %s --check-prefix=DUMP
 

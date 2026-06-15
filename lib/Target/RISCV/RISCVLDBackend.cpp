@@ -898,6 +898,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
   Relocator::DWord S = getSymbolValuePLT(*BaseReloc);
   uint64_t Offset = Reloc.targetRef()->offset();
   StringRef SymName = SymInfo->name();
+  const char *RelaxName = "RISCV_GOT_LOAD";
   bool GOTRelaxEnabled = config().options().getRISCVRelax() &&
                          config().options().getRISCVRelaxGOT();
   if (SymInfo->isAbsolute() || SymInfo->isWeakUndef()) {
@@ -909,12 +910,12 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
         GOTRelaxEnabled && !SymbolValueMayBeUnknown && llvm::isInt<12>(S);
     if (Reloc.type() == llvm::ELF::R_RISCV_GOT_HI20) {
       if (!CanRelaxToAddi) {
-        reportMissedRelaxation("RISCV_GOT", *region, Offset, 4, SymName);
+        reportMissedRelaxation(RelaxName, *region, Offset, 4, SymName);
         return false;
       }
 
       Reloc.setType(llvm::ELF::R_RISCV_NONE);
-      relaxDeleteBytes("RISCV_GOT", *region, Offset, 4, SymName);
+      relaxDeleteBytes(RelaxName, *region, Offset, 4, SymName);
       setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
@@ -933,7 +934,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       Reloc.setTargetData(CLi);
       Reloc.setType(ELF::riscv::internal::R_RISCV_RVC_LI);
       Reloc.setSymInfo(SymInfo);
-      relaxDeleteBytes("RISCV_LI_C", *region, Offset + 2, 2, SymName);
+      relaxDeleteBytes(RelaxName, *region, Offset + 2, 2, SymName);
 
       if (m_Module.getPrinter()->isVerbose())
         config().raise(Diag::relax_to_compress)
@@ -957,7 +958,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
       Reloc.setTargetData(Addi);
       Reloc.setType(llvm::ELF::R_RISCV_LO12_I);
       // Report the two bytes missed if we had been able to use `c.li`.
-      reportMissedRelaxation("RISCV_GOT", *region, Offset, 2, SymName);
+      reportMissedRelaxation(RelaxName, *region, Offset, 2, SymName);
       setRelocGOTLoadRelaxed(&Reloc);
       return true;
     }
@@ -974,7 +975,7 @@ bool RISCVLDBackend::doRelaxationGOT(Relocation &Reloc) {
     // Still report a missed relaxation as we could have avoided a GOT access
     // even if it doesn't save any bytes.
     if (Reloc.type() == llvm::ELF::R_RISCV_PCREL_LO12_I)
-      reportMissedRelaxation("RISCV_GOT", *region, Offset, 0, SymName);
+      reportMissedRelaxation(RelaxName, *region, Offset, 0, SymName);
     return false;
   }
 

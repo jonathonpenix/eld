@@ -6,8 +6,8 @@ RUN: %clang %clangopts -c %p/Inputs/weakundef.s -o %t.o
 RUN: %link %linkopts -static --verbose -MapStyle txt -Map %t.static.map \
 RUN: %t.o -o %t.static.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-C
 
-VERBOSE-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
-VERBOSE-C-NEXT: RISCV_LI_C : Deleting 2 bytes for symbol 'sym_weakundef'
+VERBOSE-C: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'sym_weakundef'
+VERBOSE-C-NEXT: RISCV_GOT_LOAD : Deleting 2 bytes for symbol 'sym_weakundef'
 VERBOSE-C-NEXT: RISCV_LI_C : relaxing instruction {{.*}} to compressed instruction {{.*}} for symbol sym_weakundef
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.static.out | %filecheck %s --check-prefix=DUMP-C
@@ -21,8 +21,8 @@ MAP-C-NOT: # RelaxationBytesMissed
 RUN: %link %linkopts -static --no-relax-c --verbose -MapStyle txt -Map %t.norelaxc.map \
 RUN: %t.o -o %t.norelaxc.out 2>&1 | %filecheck %s --check-prefix=VERBOSE-NO-C
 
-VERBOSE-NO-C: RISCV_GOT : Deleting 4 bytes for symbol 'sym_weakundef'
-VERBOSE-NO-C-NEXT: RISCV_GOT : Cannot relax 2 bytes for symbol 'sym_weakundef'
+VERBOSE-NO-C: RISCV_GOT_LOAD : Deleting 4 bytes for symbol 'sym_weakundef'
+VERBOSE-NO-C-NEXT: RISCV_GOT_LOAD : Cannot relax 2 bytes for symbol 'sym_weakundef'
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefix=DUMP-NO-C
 
@@ -40,7 +40,7 @@ RUN: %link %linkopts -static -pie --verbose -MapStyle txt -Map %t.static-pie.map
 ## Shared, the symbol is preemptible so no relaxation should happen.
 RUN: %link %linkopts -shared --verbose -MapStyle txt -Map %t.shared.map %t.o -o %t.so 2>&1 | %filecheck %s --check-prefix=NO-RELAX-VERBOSE
 
-NO-RELAX-VERBOSE-NOT: RISCV_GOT
+NO-RELAX-VERBOSE-NOT: RISCV_GOT_LOAD
 NO-RELAX-VERBOSE-NOT: RISCV_LI_C
 
 RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.static-pie.out | %filecheck %s --check-prefix=NO-RELAX-DUMP
