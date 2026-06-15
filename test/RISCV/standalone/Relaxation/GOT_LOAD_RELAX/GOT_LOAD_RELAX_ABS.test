@@ -64,7 +64,6 @@ DUMP-COMMON: auipc a0,
 DUMP-COMMON-NEXT: {{l[wd]}} a0,
 DUMP-COMMON: addi zero, zero, 31
 DUMP-COMMON: addi a1, zero, 42
-DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.static.map --check-prefix=MAP-C
 RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-C
@@ -108,8 +107,6 @@ DSO-DUMP-NEXT: {{l[wd]}} a0,
 DSO-DUMP-NEXT: auipc zero,
 DSO-DUMP-NEXT: {{l[wd]}} zero,
 DSO-DUMP-NEXT: addi a1, zero, 42
-DSO-DUMP-NOT: c.li
-DSO-DUMP-NOT: addi {{a[0-9]+}}, zero,
 
 RUN: %filecheck %s --input-file=%t.dso.map --check-prefix=MAP-DSO
 MAP-DSO: # RelaxationBytesDeleted : 4

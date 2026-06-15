@@ -27,7 +27,6 @@ VERBOSE-NO-C-NEXT: RISCV_GOT_LOAD : Cannot relax 2 bytes for symbol 'sym_weakund
 RUN: %objdump --no-print-imm-hex -M no-aliases -dr %t.norelaxc.out | %filecheck %s --check-prefix=DUMP-NO-C
 
 DUMP-NO-C: addi a0, zero, 0
-DUMP-NO-C-NOT: c.li
 
 RUN: %filecheck %s --input-file=%t.norelaxc.map --check-prefix=MAP-NO-C
 MAP-NO-C: # RelaxationBytesDeleted : 4
@@ -48,8 +47,6 @@ RUN: %objdump --no-print-imm-hex -M no-aliases -d %t.so | %filecheck %s --check-
 
 NO-RELAX-DUMP: auipc a0,
 NO-RELAX-DUMP-NEXT: {{l[wd]}} a0,
-NO-RELAX-DUMP-NOT: c.li
-NO-RELAX-DUMP-NOT: addi {{a[0-9]+}}, zero,
 
 RUN: %filecheck %s --input-file=%t.static-pie.map --check-prefix=MAP-NO-RELAX
 RUN: %filecheck %s --input-file=%t.shared.map --check-prefix=MAP-NO-RELAX

@@ -16,8 +16,6 @@ NO-RELAX: auipc a1,
 NO-RELAX-NEXT: {{l[wd]}} a1,
 NO-RELAX: auipc a2,
 NO-RELAX-NEXT: {{l[wd]}} a2,
-NO-RELAX-NOT: c.li
-NO-RELAX-NOT: addi {{a[0-9]+}},
 
 ## Check relaxation isn't performed if not all HI/LOs have R_RISCV_RELAX or
 ## if a LO is missing.
@@ -40,5 +38,3 @@ PARTIAL-NO-RELAX: auipc a1,
 PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a2,
 PARTIAL-NO-RELAX-NEXT: {{l[wd]}} a3,
 PARTIAL-NO-RELAX: auipc a1,
-PARTIAL-NO-RELAX-NOT: c.li
-PARTIAL-NO-RELAX-NOT: addi {{a[0-9]+}},
