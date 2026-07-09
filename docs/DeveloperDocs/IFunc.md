@@ -26,7 +26,7 @@ int bar(int u) {
 }
 ```
 
-# Static linking
+## Static linking
 
 eld generates a PLT slot for each ifunc symbol. Each PLT slot has a corresponding
 GOTPLT slot. This model is very similar to how preemptible dynamic symbols are handled.

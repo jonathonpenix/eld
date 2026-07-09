@@ -83,6 +83,8 @@ EMBEDDED_GIF_DATA_RE = re.compile(
     r'(?P<data_url>data:image/gif;base64,(?P<encoded>[^"\']+))(?P=quote)'
 )
 GIF_BACKGROUND_RGBA = (255, 255, 255, 255)
+PDF_LABEL_ATTR = "data-eld-pdf-labels"
+INDEX_REFERENCE_RE = re.compile(r"^\[\d+\]$")
 
 
 def typst_string(text: str) -> str:
@@ -129,6 +131,179 @@ class TypstConverter:
     def __init__(self, input_html: pathlib.Path):
         self.input_html = input_html
         self._pdf_safe_gif_data_urls: dict[str, str] = {}
+        self._href_labels: dict[str, str] = {}
+
+    def href_target(self, href: str | None) -> tuple[str, str | None] | None:
+        if not href or href.startswith(("http://", "https://", "mailto:")):
+            return None
+        path, separator, fragment = href.partition("#")
+        if not path:
+            return None
+        path = path.removeprefix("./")
+        if not path.endswith(".html"):
+            return None
+        document_name = path.removesuffix(".html")
+        return document_name, fragment if separator else None
+
+    def target_key(self, target: tuple[str, str | None]) -> str:
+        document_name, fragment = target
+        return f"{document_name}#{fragment}" if fragment else document_name
+
+    def target_label(self, target: tuple[str, str | None]) -> str:
+        return "pdf-" + re.sub(r"[^A-Za-z0-9_-]+", "-", self.target_key(target)).strip("-")
+
+    def add_element_label(self, element, label: str) -> None:
+        labels = (element.get(PDF_LABEL_ATTR) or "").split()
+        if label not in labels:
+            labels.append(label)
+            element.set(PDF_LABEL_ATTR, " ".join(labels))
+
+    def label_anchors(self, element, *, block: bool) -> str:
+        labels = (element.get(PDF_LABEL_ATTR) or "").split()
+        if not labels:
+            return ""
+        if block:
+            return "".join(f"#metadata(none) <{label}>\n" for label in labels)
+        return " ".join(f"#metadata(none) <{label}>" for label in labels) + " "
+
+    def prepare_index_links(self, input_document) -> None:
+        self._href_labels = {}
+        for element in input_document.xpath(f"//*[@{PDF_LABEL_ATTR}]"):
+            element.attrib.pop(PDF_LABEL_ATTR, None)
+
+        index_path = self.index_html_path()
+        if index_path is None:
+            return
+
+        index_document = html.parse(str(index_path))
+        target_labels = {}
+        href_targets = {}
+        for anchor in index_document.xpath("//a[@href]"):
+            href = anchor.get("href")
+            target = self.href_target(href)
+            if target is None:
+                continue
+            target_labels.setdefault(target, self.target_label(target))
+            href_targets[self.target_key(target)] = target
+
+        if not target_labels:
+            return
+
+        page_labels = {}
+        fragment_labels = {}
+        for target, label in target_labels.items():
+            document_name, fragment = target
+            if fragment is None:
+                page_labels.setdefault(document_name, []).append(label)
+            else:
+                fragment_labels.setdefault((document_name, fragment), []).append(label)
+
+        assigned_targets = set()
+        current_document = "index"
+        root = input_document.getroot()
+        for label in page_labels.get("index", []):
+            self.add_element_label(root, label)
+            assigned_targets.add(("index", None))
+
+        for element in input_document.xpath("//*"):
+            element_id = element.get("id")
+            if not element_id:
+                continue
+
+            tag = element.tag.lower() if isinstance(element.tag, str) else ""
+            if tag == "span" and element_id.startswith("document-"):
+                current_document = element_id.removeprefix("document-")
+                for label in page_labels.get(current_document, []):
+                    self.add_element_label(element, label)
+                    assigned_targets.add((current_document, None))
+
+            target = (current_document, element_id)
+            if target not in assigned_targets:
+                for label in fragment_labels.get(target, []):
+                    self.add_element_label(element, label)
+                    assigned_targets.add(target)
+
+        for href_key, target in href_targets.items():
+            if target in assigned_targets:
+                self._href_labels[href_key] = target_labels[target]
+
+    def internal_link_label(self, href: str | None) -> str | None:
+        target = self.href_target(href)
+        if target is None:
+            return None
+        return self._href_labels.get(self.target_key(target))
+
+    def remove_index_section(self, document, heading_id: str) -> None:
+        for heading in document.xpath(f'//h2[@id="{heading_id}"]'):
+            parent = heading.getparent()
+            sibling = heading.getnext()
+            parent.remove(heading)
+            while sibling is not None:
+                next_sibling = sibling.getnext()
+                tag = sibling.tag.lower() if isinstance(sibling.tag, str) else ""
+                if tag == "h2":
+                    break
+                parent.remove(sibling)
+                sibling = next_sibling
+
+    def remove_index_heading(self, document, heading_id: str) -> None:
+        for heading in document.xpath(f'//h2[@id="{heading_id}"]'):
+            heading.getparent().remove(heading)
+
+    def flatten_keyword_index_groups(self, document) -> None:
+        for item in document.xpath(
+            '//table[contains(concat(" ", normalize-space(@class), " "), " genindextable ")]//td/ul/li'
+        ):
+            if clean_text(item.text or "") != "command line option":
+                continue
+            child_lists = item.xpath("./ul")
+            if len(child_lists) != 1:
+                continue
+
+            parent = item.getparent()
+            index = parent.index(item)
+            children = list(child_lists[0].xpath("./li"))
+            parent.remove(item)
+            for child in children:
+                parent.insert(index, child)
+                index += 1
+
+    def normalize_index_references(self, document) -> None:
+        for item in document.xpath(
+            '//table[contains(concat(" ", normalize-space(@class), " "), " genindextable ")]//li'
+        ):
+            anchors = item.xpath("./a[@href]")
+            keyword_anchor = next(
+                (
+                    anchor
+                    for anchor in anchors
+                    if not INDEX_REFERENCE_RE.fullmatch(clean_text(anchor.text_content()))
+                ),
+                None,
+            )
+            reference_anchors = [
+                anchor
+                for anchor in anchors
+                if INDEX_REFERENCE_RE.fullmatch(clean_text(anchor.text_content()))
+            ]
+            if keyword_anchor is None or not reference_anchors:
+                continue
+
+            if self.internal_link_label(keyword_anchor.get("href")) is None:
+                for anchor in reference_anchors:
+                    if self.internal_link_label(anchor.get("href")) is not None:
+                        keyword_anchor.set("href", anchor.get("href"))
+                        break
+
+            keyword_anchor.tail = ""
+            for anchor in reference_anchors:
+                item.remove(anchor)
+
+    def prepare_pdf_index(self, document) -> None:
+        self.remove_index_section(document, "Symbols")
+        self.remove_index_heading(document, "C")
+        self.flatten_keyword_index_groups(document)
+        self.normalize_index_references(document)
 
     def svg_dimensions(self, source: str) -> tuple[float, float] | None:
         if not source.endswith(".svg"):
@@ -246,12 +421,15 @@ class TypstConverter:
             href = element.get("href") or ""
             if href.startswith(("http://", "https://", "mailto:")):
                 return f"#link({typst_string(href)})[{text}]"
+            label = self.internal_link_label(href)
+            if label is not None:
+                return f"#link(<{label}>)[{text}]"
             return text
         classes = set((element.get("class") or "").split())
         if tag == "mark" or "highlighted" in classes:
             return f"#box(fill: highlight-yellow, inset: (x: 1pt, y: 0pt), radius: 1pt)[{self.child_inline(element)}]"
         if tag == "span":
-            return self.child_inline(element)
+            return self.label_anchors(element, block=False) + self.child_inline(element)
         if tag == "img":
             source = element.get("src")
             return self.image(source) if source else ""
@@ -276,50 +454,54 @@ class TypstConverter:
             return ""
         tag = element.tag.lower()
         classes = set((element.get("class") or "").split())
+        anchors = self.label_anchors(element, block=True)
         if classes & ADMONITION_TITLES:
-            return ""
+            return anchors
         if "admonition" in classes:
-            return self.admonition(element)
+            return anchors + self.admonition(element)
         if tag in {"h1", "h2", "h3", "h4", "h5", "h6", "h7", "h8"}:
             level = int(tag[1:])
             heading = re.sub(r"\s+", " ", self.child_inline(element)).strip()
             if level == 1 and heading == "ELD User Guide":
-                return ""
-            return f"{'=' * level} {heading}\n\n"
+                return anchors
+            return f"{anchors}{'=' * level} {heading}\n\n"
         if tag == "p":
             content = self.child_inline(element).strip()
-            return f"{content}\n\n" if content else ""
+            return f"{anchors}{content}\n\n" if content else anchors
         if tag == "pre":
-            return self.raw_block(element.text_content())
+            return anchors + self.raw_block(element.text_content())
         if tag == "blockquote":
             body = self.child_blocks(element).strip()
-            return f"#quote(block: true)[\n{body}\n]\n\n" if body else ""
+            return f"{anchors}#quote(block: true)[\n{body}\n]\n\n" if body else anchors
         if tag in {"ul", "ol"}:
-            return self.list_block(element, ordered=(tag == "ol"))
+            return anchors + self.list_block(element, ordered=(tag == "ol"))
         if tag == "dl":
-            return self.definition_list(element)
+            return anchors + self.definition_list(element)
         if tag == "table":
-            return self.table(element)
+            return anchors + self.table(element)
         if tag == "object":
-            return self.figure(element.get("data"))
+            return anchors + self.figure(element.get("data"))
         if tag == "img":
-            return self.figure(element.get("src"))
+            return anchors + self.figure(element.get("src"))
         if tag == "hr":
-            return "#line(length: 100%)\n\n"
+            return f"{anchors}#line(length: 100%)\n\n"
         if "contents" in classes and "topic" in classes:
-            return ""
+            return anchors
         if "genindex-jumpbox" in classes:
-            return ""
+            return anchors
         if tag in {"div", "section", "article", "main", "body"}:
-            return self.child_blocks(element)
+            return anchors + self.child_blocks(element)
         if tag in {"dt", "dd", "li"}:
             content = self.child_inline(element).strip()
-            return f"{content}\n\n" if content else self.child_blocks(element)
+            return f"{anchors}{content}\n\n" if content else anchors + self.child_blocks(element)
         content = self.child_inline(element).strip()
-        return f"{content}\n\n" if content else self.child_blocks(element)
+        return f"{anchors}{content}\n\n" if content else anchors + self.child_blocks(element)
 
     def list_item_content(self, item) -> str:
         parts = []
+        anchors = self.label_anchors(item, block=False).strip()
+        if anchors:
+            parts.append(anchors)
         if item.text and item.text.strip():
             parts.append(escape_text(clean_text(item.text)))
         for child in item:
@@ -354,8 +536,9 @@ class TypstConverter:
         while child_index < len(children):
             child = children[child_index]
             if child.tag.lower() == "dt":
+                anchors = self.label_anchors(child, block=True)
                 term = self.child_inline(child).strip() or escape_text(clean_text(child.text_content()))
-                output.append(f"#strong[{term}]\n")
+                output.append(f"{anchors}#strong[{term}]\n")
                 if child_index + 1 < len(children) and children[child_index + 1].tag.lower() == "dd":
                     description = self.child_blocks(children[child_index + 1]).strip()
                     if description:
@@ -466,6 +649,7 @@ class TypstConverter:
         )
         if not nodes:
             return ""
+        self.prepare_pdf_index(document)
         body = self.child_blocks(nodes[0]).strip()
         return f"#pagebreak()\n{body}\n" if body else ""
 
@@ -491,6 +675,7 @@ class TypstConverter:
 
     def convert(self, title: str, author: str) -> str:
         document = html.parse(str(self.input_html))
+        self.prepare_index_links(document)
         nodes = document.xpath('//div[@itemprop="articleBody"]') or document.xpath("//body")
         if not nodes:
             raise RuntimeError(f"Could not find article body in {self.input_html}")

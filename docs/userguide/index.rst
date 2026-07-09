@@ -38,6 +38,16 @@ This document describes usage of ELD
    documentation/editor_support.rst
    documentation/linker_faq.rst
 
+
+.. toctree::
+   :maxdepth: 2
+   :glob:
+   :titlesonly:
+   :caption: Developer Docs
+   :numbered:
+
+   DeveloperDocs/*
+
 *******************
 User guide
 *******************

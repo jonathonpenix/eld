@@ -27,6 +27,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.todo",
     "sphinx.ext.ifconfig",
+    "myst_parser",
     "sphinxext_d2",
 ]
 
@@ -43,7 +44,10 @@ if _BREATHE_XML_DIR:
 templates_path = ["_templates"]
 exclude_patterns = ["_build", "_build_*", "**/_build", "**/_build_*"]
 
-source_suffix = ".rst"
+source_suffix = {
+    ".rst": "restructuredtext",
+    ".md": "markdown",
+}
 master_doc = "index"
 
 language = "en"

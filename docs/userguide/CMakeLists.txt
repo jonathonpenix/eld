@@ -16,6 +16,9 @@ if(LLVM_ENABLE_SPHINX)
     eld-copy-userguide-source
     COMMAND ${CMAKE_COMMAND} -E copy_directory ${CMAKE_CURRENT_SOURCE_DIR}
             ${DOCS_BUILD_SOURCE}
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${ELD_SOURCE_DIR}/docs/DeveloperDocs
+            ${DOCS_BUILD_SOURCE}/DeveloperDocs
     WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
   add_custom_target(eld-linkeroptions-docs)

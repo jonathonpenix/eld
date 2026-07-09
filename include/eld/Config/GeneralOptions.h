@@ -66,6 +66,8 @@ public:
 
   enum HashStyle { SystemV = 0x1, GNU = 0x2, Both = 0x3 };
 
+  enum class RISCVRelaxTbljalMode { None, Zcmt, Xqccmt };
+
   enum TraceType { T_Files = 0x1, T_Trampolines = 0x2, T_Symbols = 0x4 };
 
   enum LTOOptionType {
@@ -216,6 +218,10 @@ public:
   }
 
   bool hasOutputFileName() const { return OutputFileName.has_value(); }
+
+  void setEmitOutputFile(bool Enable = true) { EmitOutputFile = Enable; }
+
+  bool shouldEmitOutputFile() { return EmitOutputFile; }
 
   void setVerbose(int8_t PVerbose = 1);
 
@@ -934,9 +940,21 @@ public:
 
   bool getRISCVRelaxTLSDESC() const { return BRiscvRelaxTLSDESC; }
 
-  void setRISCVRelaxTbljal(bool Value) { BRiscvRelaxTbljal = Value; }
+  void setRISCVRelaxTbljal(RISCVRelaxTbljalMode Mode) {
+    RiscvRelaxTbljal = Mode;
+  }
 
-  bool getRISCVRelaxTbljal() const { return BRiscvRelaxTbljal; }
+  bool getRISCVRelaxTbljal() const {
+    return RiscvRelaxTbljal != RISCVRelaxTbljalMode::None;
+  }
+
+  RISCVRelaxTbljalMode getRISCVRelaxTbljalMode() const {
+    return RiscvRelaxTbljal;
+  }
+
+  bool getRISCVRelaxTbljalToXqccmt() const {
+    return RiscvRelaxTbljal == RISCVRelaxTbljalMode::Xqccmt;
+  }
 
   void setRISCVRelaxGOT(bool Value) { BRiscvRelaxGOT = Value; }
 
@@ -1305,7 +1323,8 @@ private:
   bool BRiscvRelaxToC = true; // enable riscv relax to compressed code
   bool BRiscvRelaxXqci = false; // enable riscv relaxations for xqci
   bool BRiscvRelaxTLSDESC = true; // enable riscv relaxations for TLSDESC
-  bool BRiscvRelaxTbljal = false; // enable Zcmt table jump relaxation
+  RISCVRelaxTbljalMode RiscvRelaxTbljal =
+      RISCVRelaxTbljalMode::None; // enable Zcmt/Xqccmt table jump relaxation
   bool BRiscvRelaxGOT = true;     // enable RISC-V GOT load relaxations
   bool AllowIncompatibleSectionsMix = false; // Allow incompatibleSections;
   bool ProgressBar = false;                  // Show progressbar.
@@ -1411,6 +1430,7 @@ private:
   std::string LinkLaunchDirectory;
   bool ShowRMSectNameInDiag = false;
   bool UseDefaultPlugins = true;
+  bool EmitOutputFile = true;
 };
 
 } // namespace eld
